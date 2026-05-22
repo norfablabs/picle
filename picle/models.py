@@ -491,9 +491,15 @@ class Outputters(BaseModel):
             for item in data:
                 if not isinstance(item, Mapping):
                     return False
-                for i in item.values():
-                    if isinstance(i, (list, tuple, Mapping)):
+                for k, v in item.items():
+                    if isinstance(v, Mapping):
                         return False
+                    if isinstance(v, (list, tuple,)):
+                        # see if inner list is a flat list of strings or integers
+                        if all(isinstance(i, (str, int, float)) for i in v): 
+                            item[k] = ", ".join(i)
+                        else:
+                            return False
             return True
 
         def ustring(indent, msg, prefix="", suffix=""):
