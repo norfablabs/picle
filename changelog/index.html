@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#0121" class="md-skip">
+        <a href="#0122" class="md-skip">
           Skip to content
         </a>
       
@@ -502,6 +502,17 @@
     <span class="md-ellipsis">
       
         BUGS
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enhancements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ENHANCEMENTS
       
     </span>
   </a>
@@ -1094,6 +1105,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#enhancements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ENHANCEMENTS
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1114,8 +1136,19 @@
   
 
 
-<h1 id="0121">0.12.1</h1>
+<h1 id="0122">0.12.2</h1>
 <h2 id="bugs">BUGS</h2>
+<ol>
+<li>Fixing python 3.14 + compatibility- factorized cmd.py and updated it to work with pyreadline3</li>
+<li>Fixing handling of quoted json string like '["key": "valu"]'</li>
+</ol>
+<h2 id="enhancements">ENHANCEMENTS</h2>
+<ol>
+<li>Nested with table improved to handle lists of string or integer items, and simple dictionaries, converting them to tables of single row.</li>
+</ol>
+<hr />
+<h1 id="0121">0.12.1</h1>
+<h2 id="bugs_1">BUGS</h2>
 <ol>
 <li>Fixing command validation handling to make sure if validation succeeds but no data returned its not blocking the command</li>
 <li>Enhancing outputters handling for chat shell model</li>
@@ -1138,7 +1171,7 @@
 <ol>
 <li>Adding support for model <code>source_&lt;field name&gt;</code> method to accept <code>choice</code> argument that holds current variable value</li>
 </ol>
-<h2 id="bugs_1">BUGS</h2>
+<h2 id="bugs_2">BUGS</h2>
 <ol>
 <li>Fixing handling of field source collection when has only one value for the variable</li>
 </ol>
@@ -1150,7 +1183,7 @@
 <li>Adding support negate <code>no</code> command to configuraiton model, negate arguments are dynamically constructed for every model</li>
 <li>Adding <code>last</code> filter to pipe functions to return last N lines of output</li>
 </ol>
-<h2 id="enhancements">ENHANCEMENTS</h2>
+<h2 id="enhancements_1">ENHANCEMENTS</h2>
 <ol>
 <li>Updating outputter_kv to support flatenning arbitrary nested structures .</li>
 <li>
@@ -1178,7 +1211,7 @@
 </ol>
 <hr />
 <h1 id="0101">0.10.1</h1>
-<h2 id="bugs_2">BUGS</h2>
+<h2 id="bugs_3">BUGS</h2>
 <ol>
 <li>MAN fixing examples output when examples are anything but string</li>
 </ol>
@@ -1205,7 +1238,7 @@
 <ol>
 <li>Added ConfigModel model to picle to help with maintaininng configuration files using Picle interactive shell.</li>
 </ol>
-<h2 id="bugs_3">BUGS</h2>
+<h2 id="bugs_4">BUGS</h2>
 <ol>
 <li><strong>init</strong> ~L97 -PicleConfig accessed without hasattr guard — crash for models without it</li>
 <li>do_help ~L855 - Multi-word help silently discarded — never printed</li>
