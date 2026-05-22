@@ -49,11 +49,9 @@ import sys
 
 __all__ = ["Cmd"]
 
-PROMPT = '(Cmd) '
-IDENTCHARS = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-              'abcdefghijklmnopqrstuvwxyz'
-              '0123456789'
-              '_')
+PROMPT = "(Cmd) "
+IDENTCHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" "0123456789" "_"
+
 
 class Cmd:
     """A simple framework for writing line-oriented command interpreters.
@@ -67,10 +65,11 @@ class Cmd:
     in order to inherit Cmd's methods and encapsulate action methods.
 
     """
+
     prompt = PROMPT
     identchars = IDENTCHARS
-    ruler = '='
-    lastcmd = ''
+    ruler = "="
+    lastcmd = ""
     intro = None
     doc_leader = ""
     doc_header = "Documented commands (type help <topic>):"
@@ -79,7 +78,7 @@ class Cmd:
     nohelp = "*** No help on %s"
     use_rawinput = 1
 
-    def __init__(self, completekey='tab', stdin=None, stdout=None):
+    def __init__(self, completekey="tab", stdin=None, stdout=None):
         """Instantiate a line-oriented interpreter framework.
 
         The optional argument 'completekey' is the readline name of a
@@ -112,10 +111,11 @@ class Cmd:
         if self.use_rawinput and self.completekey:
             try:
                 import readline
+
                 self.old_completer = readline.get_completer()
                 readline.set_completer(self.complete)
                 if hasattr(readline, "backend") and readline.backend == "editline":
-                    if self.completekey == 'tab':
+                    if self.completekey == "tab":
                         # libedit uses "^I" instead of "tab"
                         command_string = "bind ^I rl_complete"
                     else:
@@ -129,7 +129,7 @@ class Cmd:
             if intro is not None:
                 self.intro = intro
             if self.intro:
-                self.stdout.write(str(self.intro)+"\n")
+                self.stdout.write(str(self.intro) + "\n")
             stop = None
             while not stop:
                 if self.cmdqueue:
@@ -139,15 +139,15 @@ class Cmd:
                         try:
                             line = input(self.prompt)
                         except EOFError:
-                            line = 'EOF'
+                            line = "EOF"
                     else:
                         self.stdout.write(self.prompt)
                         self.stdout.flush()
                         line = self.stdin.readline()
                         if not len(line):
-                            line = 'EOF'
+                            line = "EOF"
                         else:
-                            line = line.rstrip('\r\n')
+                            line = line.rstrip("\r\n")
                 line = self.precmd(line)
                 stop = self.onecmd(line)
                 stop = self.postcmd(stop, line)
@@ -156,10 +156,10 @@ class Cmd:
             if self.use_rawinput and self.completekey:
                 try:
                     import readline
+
                     readline.set_completer(self.old_completer)
                 except ImportError:
                     pass
-
 
     def precmd(self, line):
         """Hook method executed just before the command line is
@@ -191,15 +191,16 @@ class Cmd:
         line = line.strip()
         if not line:
             return None, None, line
-        elif line[0] == '?':
-            line = 'help ' + line[1:]
-        elif line[0] == '!':
-            if hasattr(self, 'do_shell'):
-                line = 'shell ' + line[1:]
+        elif line[0] == "?":
+            line = "help " + line[1:]
+        elif line[0] == "!":
+            if hasattr(self, "do_shell"):
+                line = "shell " + line[1:]
             else:
                 return None, None, line
         i, n = 0, len(line)
-        while i < n and line[i] in self.identchars: i = i+1
+        while i < n and line[i] in self.identchars:
+            i = i + 1
         cmd, arg = line[:i], line[i:].strip()
         return cmd, arg, line
 
@@ -219,12 +220,12 @@ class Cmd:
         if cmd is None:
             return self.default(line)
         self.lastcmd = line
-        if line == 'EOF' :
-            self.lastcmd = ''
-        if cmd == '':
+        if line == "EOF":
+            self.lastcmd = ""
+        if cmd == "":
             return self.default(line)
         else:
-            func = getattr(self, 'do_' + cmd, None)
+            func = getattr(self, "do_" + cmd, None)
             if func is None:
                 return self.default(line)
             return func(arg)
@@ -246,7 +247,7 @@ class Cmd:
         returns.
 
         """
-        self.stdout.write('*** Unknown syntax: %s\n'%line)
+        self.stdout.write("*** Unknown syntax: %s\n" % line)
 
     def completedefault(self, *ignored):
         """Method called to complete an input line when no command-specific
@@ -258,7 +259,7 @@ class Cmd:
         return []
 
     def completenames(self, text, *ignored):
-        dotext = 'do_'+text
+        dotext = "do_" + text
         return [a[3:] for a in self.get_names() if a.startswith(dotext)]
 
     def complete(self, text, state):
@@ -269,18 +270,19 @@ class Cmd:
         """
         if state == 0:
             import readline
+
             origline = readline.get_line_buffer()
             line = origline.lstrip()
             stripped = len(origline) - len(line)
             begidx = readline.get_begidx() - stripped
             endidx = readline.get_endidx() - stripped
-            if begidx>0:
+            if begidx > 0:
                 cmd, args, foo = self.parseline(line)
                 if not cmd:
                     compfunc = self.completedefault
                 else:
                     try:
-                        compfunc = getattr(self, 'complete_' + cmd)
+                        compfunc = getattr(self, "complete_" + cmd)
                     except AttributeError:
                         compfunc = self.completedefault
             else:
@@ -298,8 +300,7 @@ class Cmd:
 
     def complete_help(self, *args):
         commands = set(self.completenames(*args))
-        topics = set(a[5:] for a in self.get_names()
-                     if a.startswith('help_' + args[0]))
+        topics = set(a[5:] for a in self.get_names() if a.startswith("help_" + args[0]))
         return list(commands | topics)
 
     def do_help(self, arg):
@@ -307,19 +308,19 @@ class Cmd:
         if arg:
             # XXX check arg syntax
             try:
-                func = getattr(self, 'help_' + arg)
+                func = getattr(self, "help_" + arg)
             except AttributeError:
                 from inspect import cleandoc
 
                 try:
-                    doc=getattr(self, 'do_' + arg).__doc__
+                    doc = getattr(self, "do_" + arg).__doc__
                     doc = cleandoc(doc)
                     if doc:
-                        self.stdout.write("%s\n"%str(doc))
+                        self.stdout.write("%s\n" % str(doc))
                         return
                 except AttributeError:
                     pass
-                self.stdout.write("%s\n"%str(self.nohelp % (arg,)))
+                self.stdout.write("%s\n" % str(self.nohelp % (arg,)))
                 return
             func()
         else:
@@ -328,17 +329,17 @@ class Cmd:
             cmds_undoc = []
             topics = set()
             for name in names:
-                if name[:5] == 'help_':
+                if name[:5] == "help_":
                     topics.add(name[5:])
             names.sort()
             # There can be duplicates if routines overridden
-            prevname = ''
+            prevname = ""
             for name in names:
-                if name[:3] == 'do_':
+                if name[:3] == "do_":
                     if name == prevname:
                         continue
                     prevname = name
-                    cmd=name[3:]
+                    cmd = name[3:]
                     if cmd in topics:
                         cmds_doc.append(cmd)
                         topics.remove(cmd)
@@ -346,17 +347,17 @@ class Cmd:
                         cmds_doc.append(cmd)
                     else:
                         cmds_undoc.append(cmd)
-            self.stdout.write("%s\n"%str(self.doc_leader))
-            self.print_topics(self.doc_header,   cmds_doc,   15,80)
-            self.print_topics(self.misc_header,  sorted(topics),15,80)
-            self.print_topics(self.undoc_header, cmds_undoc, 15,80)
+            self.stdout.write("%s\n" % str(self.doc_leader))
+            self.print_topics(self.doc_header, cmds_doc, 15, 80)
+            self.print_topics(self.misc_header, sorted(topics), 15, 80)
+            self.print_topics(self.undoc_header, cmds_undoc, 15, 80)
 
     def print_topics(self, header, cmds, cmdlen, maxcol):
         if cmds:
-            self.stdout.write("%s\n"%str(header))
+            self.stdout.write("%s\n" % str(header))
             if self.ruler:
-                self.stdout.write("%s\n"%str(self.ruler * len(header)))
-            self.columnize(cmds, maxcol-1)
+                self.stdout.write("%s\n" % str(self.ruler * len(header)))
+            self.columnize(cmds, maxcol - 1)
             self.stdout.write("\n")
 
     def columnize(self, list, displaywidth=80):
@@ -369,24 +370,24 @@ class Cmd:
             self.stdout.write("<empty>\n")
             return
 
-        nonstrings = [i for i in range(len(list))
-                        if not isinstance(list[i], str)]
+        nonstrings = [i for i in range(len(list)) if not isinstance(list[i], str)]
         if nonstrings:
-            raise TypeError("list[i] not a string for i in %s"
-                            % ", ".join(map(str, nonstrings)))
+            raise TypeError(
+                "list[i] not a string for i in %s" % ", ".join(map(str, nonstrings))
+            )
         size = len(list)
         if size == 1:
-            self.stdout.write('%s\n'%str(list[0]))
+            self.stdout.write("%s\n" % str(list[0]))
             return
         # Try every row count from 1 upwards
         for nrows in range(1, len(list)):
-            ncols = (size+nrows-1) // nrows
+            ncols = (size + nrows - 1) // nrows
             colwidths = []
             totwidth = -2
             for col in range(ncols):
                 colwidth = 0
                 for row in range(nrows):
-                    i = row + nrows*col
+                    i = row + nrows * col
                     if i >= size:
                         break
                     x = list[i]
@@ -404,7 +405,7 @@ class Cmd:
         for row in range(nrows):
             texts = []
             for col in range(ncols):
-                i = row + nrows*col
+                i = row + nrows * col
                 if i >= size:
                     x = ""
                 else:
@@ -414,4 +415,4 @@ class Cmd:
                 del texts[-1]
             for col in range(len(texts)):
                 texts[col] = texts[col].ljust(colwidths[col])
-            self.stdout.write("%s\n"%str("  ".join(texts)))
+            self.stdout.write("%s\n" % str("  ".join(texts)))

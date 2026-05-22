@@ -557,6 +557,20 @@ def test_json_field():
     )
 
 
+def test_json_field_in_quotes():
+    shell.onecmd("top")  # go to top
+    shell.onecmd(
+        """test_json_input data '{"person":{"name":"John","age":30,"contacts":[ {"arg":"email","value":"john@example.com"} ] } }'  arg foo"""
+    )
+
+    shell_output = mock_stdout.write.call_args_list[-1][0][0]
+
+    print(f"\n!!!shell output: '{shell_output}'")
+    assert (
+        """{'data': '{"person":{"name":"John","age":30,"contacts":[ {"arg":"email","value":"john@example.com"} ] } }', 'arg': 'foo'}"""
+        in shell_output
+    )
+
 def test_json_field_boolean_true():
     shell.onecmd("top")  # go to top
     shell.onecmd("""test_json_input data true arg foo""")

@@ -1,3 +1,16 @@
+# 0.12.2
+
+## BUGS
+
+1. Fixing python 3.14 + compatibility- factorized cmd.py and updated it to work with pyreadline3
+2. Fixing handling of quoted json string like '["key": "valu"]'
+
+## ENHANCEMENTS
+
+1. Nested with table improved to handle lists of string or integer items, and simple dictionaries, converting them to tables of single row.
+
+---
+
 # 0.12.1
 
 ## BUGS

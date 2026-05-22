@@ -719,8 +719,10 @@ class App(picle_cmd.Cmd):
                 self._save_collected_value(current_field, " ".join(value_items))
 
             # collect quoted field value (single or double quotes)
-            elif ('"' in parameter or "'" in parameter) and current_field:
-                quote = '"' if '"' in parameter else "'"
+            elif parameter.strip().startswith(("'", '"')) and current_field:
+                quote = '"'
+                if parameter.strip().startswith("'"):
+                    quote = "'"
                 value_items = [parameter.replace(quote, "")]
                 if parameter.count(quote) != 2:
                     while parameters:

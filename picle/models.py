@@ -497,7 +497,13 @@ class Outputters(BaseModel):
                 for k, v in item.items():
                     if isinstance(v, Mapping):
                         return False
-                    if isinstance(v, (list, tuple,)):
+                    if isinstance(
+                        v,
+                        (
+                            list,
+                            tuple,
+                        ),
+                    ):
                         # see if inner list is a flat list of strings or integers;
                         # if so, greedily pack items onto lines of up to 20 chars,
                         # joining items on the same line with ", " and separating
@@ -553,7 +559,7 @@ class Outputters(BaseModel):
                     first_line = False
             elif isinstance(ret, (list, tuple)):
                 # make a text table if it is a flat list
-                if with_tables and is_dictionary_list(ret):
+                if ret and with_tables and is_dictionary_list(ret):
                     table = Outputters.outputter_tabulate_table(ret, **tabulate_kwargs)
                     nest(table, indent + 2, prefix, out, key_level)
                 else:
@@ -565,15 +571,24 @@ class Outputters(BaseModel):
                         else:
                             nest(ind, indent, "- ", out, key_level)
             elif isinstance(ret, Mapping):
-                if indent:
-                    out.append(ustring(indent, "----------"))
+                # make a text table if it is a flat dict
+                if ret and with_tables and is_dictionary_list([ret]):
+                    table = Outputters.outputter_tabulate_table(
+                        [ret], **tabulate_kwargs
+                    )
+                    nest(table, indent + 2, prefix, out, key_level)
+                else:
+                    if indent:
+                        out.append(ustring(indent, "----------"))
 
-                for key in ret.keys():
-                    val = ret[key]
-                    styled_key = style_key(key, key_level + 1)
-                    out.append(ustring(indent, styled_key, suffix=":", prefix=prefix))
-                    # Dict depth controls key coloring; list depth does not.
-                    nest(val, indent + 4, "", out, key_level + 1)
+                    for key in ret.keys():
+                        val = ret[key]
+                        styled_key = style_key(key, key_level + 1)
+                        out.append(
+                            ustring(indent, styled_key, suffix=":", prefix=prefix)
+                        )
+                        # Dict depth controls key coloring; list depth does not.
+                        nest(val, indent + 4, "", out, key_level + 1)
 
             return out
 
