@@ -9,7 +9,7 @@ PICLE is built on top of Python standard library CMD module and
 uses Pydantic models to construct shell environments.
 """
 
-import cmd
+from . import picle_cmd
 import logging
 import enum
 import traceback
@@ -110,7 +110,7 @@ class FieldKeyError(Exception):
     """
 
 
-class App(cmd.Cmd):
+class App(picle_cmd.Cmd):
     """
     PICLE App class to construct shell.
 
