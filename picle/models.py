@@ -246,6 +246,7 @@ class NestedOutputterModel(BaseModel):
         alias="with-tables",
         json_schema_extra={"presence": True},
     )
+    tablefmt: TabulateTableFmt = Field(None, description="Table format")
     tabulate_kwargs: dict = Field(
         None,
         description="JSON string of additional keyword arguments for tabulate",
@@ -464,6 +465,7 @@ class Outputters(BaseModel):
         data: Union[dict, list],
         initial_indent: int = 0,
         with_tables: bool = False,
+        tablefmt: str = "simple",
         tabulate_kwargs: dict = None,
     ) -> str:
         """
@@ -473,12 +475,13 @@ class Outputters(BaseModel):
             data (dict or list): Nested data structure to be formatted and printed.
             initial_indent (int): Initial indentation level.
             with_tables (bool): If True, will format flat lists as Tabulate tables.
+            tablefmt (str): table format to use
             tabulate_kwargs (dict, optional): Arguments for tabulate table outputter.
 
         Returns:
             str: Formatted nested string.
         """
-        tabulate_kwargs = tabulate_kwargs or {"tablefmt": "simple"}
+        tabulate_kwargs = tabulate_kwargs or {"tablefmt": tablefmt}
 
         key_styles = {
             1: "bold green",
@@ -495,9 +498,26 @@ class Outputters(BaseModel):
                     if isinstance(v, Mapping):
                         return False
                     if isinstance(v, (list, tuple,)):
-                        # see if inner list is a flat list of strings or integers
-                        if all(isinstance(i, (str, int, float)) for i in v): 
-                            item[k] = ", ".join(i)
+                        # see if inner list is a flat list of strings or integers;
+                        # if so, greedily pack items onto lines of up to 20 chars,
+                        # joining items on the same line with ", " and separating
+                        # lines with "\n". A single item that exceeds 20 chars is
+                        # placed on its own line without truncation.
+                        if all(isinstance(i, (str, int, float)) for i in v):
+                            lines, current, current_len = [], [], 0
+                            for inner_v in v:
+                                s = str(inner_v)
+                                if not current:
+                                    current, current_len = [s], len(s)
+                                elif current_len + 2 + len(s) <= 20:
+                                    current.append(s)
+                                    current_len += 2 + len(s)
+                                else:
+                                    lines.append(", ".join(current))
+                                    current, current_len = [s], len(s)
+                            if current:
+                                lines.append(", ".join(current))
+                            item[k] = "\n".join(lines)
                         else:
                             return False
             return True
