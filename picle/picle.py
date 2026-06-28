@@ -23,6 +23,12 @@ from typing import Any, Optional, Union, get_args, get_origin, Dict
 from pydantic import ValidationError, Json
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic.fields import FieldInfo
+from prompt_toolkit import PromptSession
+from prompt_toolkit.application import run_in_terminal
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.filters import Condition
+from prompt_toolkit.history import History
+from prompt_toolkit.key_binding import KeyBindings
 from .utils import run_print_exception
 from .models import MAN
 
@@ -33,19 +39,6 @@ try:
     HAS_RICH = True
 except ImportError:
     HAS_RICH = False
-
-try:
-    import readline as _readline
-
-    HAS_READLINE = True
-except ImportError:
-    try:
-        import pyreadline3 as _readline  # Windows fallback
-
-        HAS_READLINE = True
-    except ImportError:
-        _readline = None
-        HAS_READLINE = False
 
 log = logging.getLogger(__name__)
 
@@ -110,6 +103,75 @@ class FieldKeyError(Exception):
     """
 
 
+class _PicleCompleter(Completer):
+    """Adapt prompt_toolkit completion requests to the existing Cmd hooks."""
+
+    def __init__(self, app: "App"):
+        self.app = app
+
+    def get_completions(self, document, complete_event):
+        origline = document.text
+        line = origline.lstrip()
+        stripped = len(origline) - len(line)
+        endidx = document.cursor_position - stripped
+        if endidx < 0:
+            return
+
+        begidx = endidx
+        while begidx > 0 and not line[begidx - 1].isspace():
+            begidx -= 1
+        text = line[begidx:endidx]
+
+        for match in self.app.get_completion_matches(text, line, begidx, endidx):
+            yield Completion(match, start_position=-len(text))
+
+
+class _PicleHistory(History):
+    """Readline-compatible, line-oriented persistent history."""
+
+    def __init__(self, filename: Optional[str], length: int):
+        self.filename = os.path.expanduser(filename) if filename else None
+        self.length = length
+        history_strings = []
+
+        if self.filename:
+            try:
+                with open(self.filename, encoding="utf-8") as history_file:
+                    history_strings = [
+                        line.rstrip("\r\n") for line in history_file.readlines()
+                    ]
+            except (OSError, UnicodeError):
+                pass
+
+        super().__init__()
+        self._storage = history_strings
+
+    def load_history_strings(self):
+        """Yield persisted entries with the most recent command first."""
+        yield from reversed(self._storage)
+
+    def store_string(self, string: str) -> None:
+        """Keep newly accepted commands in memory until shell exit."""
+        self._storage.append(string)
+
+    def get_strings(self) -> list[str]:
+        """Return all loaded and newly appended entries, oldest first."""
+        return list(self._storage)
+
+    def save(self) -> None:
+        """Write history using the same one-command-per-line format as readline."""
+        if not self.filename:
+            return
+
+        history_strings = self.get_strings()
+        if self.length >= 0:
+            history_strings = history_strings[-self.length :] if self.length else []
+
+        with open(self.filename, "w", encoding="utf-8", newline="\n") as history_file:
+            for line in history_strings:
+                history_file.write(f"{line}\n")
+
+
 class App(picle_cmd.Cmd):
     """
     PICLE App class to construct shell.
@@ -164,29 +226,60 @@ class App(picle_cmd.Cmd):
 
         super(App, self).__init__(stdin=stdin, stdout=stdout)
 
-        # configure readline history
-        if HAS_READLINE:
-            _readline.set_history_length(self.history_length)
-            if self.history_file:
-                history_path = os.path.expanduser(self.history_file)
-                if os.path.exists(history_path):
-                    try:
-                        _readline.read_history_file(history_path)
-                    except OSError:
-                        pass
+        self._history = _PicleHistory(self.history_file, self.history_length)
+        self._prompt_completer = _PicleCompleter(self)
+        self._inline_help_enabled = False
+        self._last_inline_help = None
+        self._prompt_key_bindings = self._create_prompt_key_bindings()
+        self._prompt_session = None
 
     def start(self) -> None:
         self.cmdloop()
 
+    def _create_prompt_key_bindings(self) -> KeyBindings:
+        """Create key bindings for the interactive command prompt."""
+        key_bindings = KeyBindings()
+
+        @key_bindings.add("?", filter=Condition(lambda: self._inline_help_enabled))
+        def show_inline_help(event) -> None:
+            self._request_inline_help(event.current_buffer.document)
+
+        return key_bindings
+
+    def _request_inline_help(self, document) -> None:
+        """Display contextual help without submitting or changing the buffer."""
+        context = (document.text_before_cursor, document.cursor_position)
+        verbose = self._last_inline_help == context
+        self._last_inline_help = None if verbose else context
+        suffix = "??" if verbose else "?"
+        line = f"{document.text_before_cursor}{suffix}"
+        run_in_terminal(lambda: self.process_help_command(line), render_cli_done=True)
+
+    def _read_interactive_input(self, prompt: str, inline_help: bool = True) -> str:
+        """Read a line using one persistent prompt_toolkit session."""
+        if self._prompt_session is None:
+            self._prompt_session = PromptSession(
+                history=self._history,
+                completer=self._prompt_completer if self.completekey else None,
+                complete_while_typing=False,
+                key_bindings=self._prompt_key_bindings,
+            )
+        previous = self._inline_help_enabled
+        self._inline_help_enabled = inline_help
+        try:
+            return self._prompt_session.prompt(prompt)
+        finally:
+            self._inline_help_enabled = previous
+            self._last_inline_help = None
+
     def postloop(self) -> None:
         """
-        Save readline history to file on shell exit.
+        Save interactive command history to file on shell exit.
         """
-        if HAS_READLINE and self.history_file:
-            try:
-                _readline.write_history_file(os.path.expanduser(self.history_file))
-            except OSError:
-                pass
+        try:
+            self._history.save()
+        except (OSError, UnicodeError):
+            pass
 
     def emptyline(self) -> None:
         """
@@ -417,7 +510,7 @@ class App(picle_cmd.Cmd):
             self.write("Enter lines and hit Ctrl+D to finish")
             while True:
                 try:
-                    line = input()
+                    line = self._read_interactive_input("", inline_help=False)
                 except EOFError:  # raise when user hits CTRL+D
                     break
                 else:
@@ -455,7 +548,9 @@ class App(picle_cmd.Cmd):
 
         while True:
             try:
-                line = input(chat_prompt).strip()
+                line = self._read_interactive_input(
+                    chat_prompt, inline_help=False
+                ).strip()
             except EOFError:
                 self.stdout.write(self.newline)
                 break
@@ -1235,31 +1330,27 @@ class App(picle_cmd.Cmd):
         if "?" in arg:
             self.write(" history    Print command history")
         else:
-            if HAS_READLINE:
-                count = _readline.get_current_history_length()
-                if count == 0:
-                    self.write("No command history")
-                else:
-                    lines = []
-                    for i in range(count):
-                        if _readline.get_history_item(i + 1):
-                            line = f" {_readline.get_history_item(i + 1).strip()}"
-                            if line.strip() in [
-                                "history",
-                                "exit",
-                                "top",
-                                "pwd",
-                                "end",
-                                "cls",
-                                "help",
-                            ]:
-                                continue
-                            if line.endswith("?"):
-                                continue
-                            if line in lines:
-                                continue
-                            lines.append(line)
-                    self.write(self.newline.join(lines))
+            history_strings = self._history.get_strings()
+            if history_strings:
+                lines = []
+                for item in history_strings:
+                    line = f" {item.strip()}"
+                    if line.strip() in [
+                        "history",
+                        "exit",
+                        "top",
+                        "pwd",
+                        "end",
+                        "cls",
+                        "help",
+                    ]:
+                        continue
+                    if line.endswith("?"):
+                        continue
+                    if line in lines:
+                        continue
+                    lines.append(line)
+                self.write(self.newline.join(lines))
             else:
                 self.write("No command history")
 

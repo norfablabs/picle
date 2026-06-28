@@ -2,7 +2,8 @@
 
 If a field enables multi-line input, the user can type the literal value `load-terminal` to start collection.
 
-PICLE reads lines until EOF (Ctrl+D) and uses the collected text (joined by `\n`) as the field value.
+PICLE reads lines until EOF and uses the collected text (joined by `\n`) as the field value.
+At an empty input prompt, press Ctrl+D to finish collection on Linux, macOS, or Windows.
 
 ```python
 from typing import Any

@@ -19,15 +19,19 @@ and specific built-in models may honor additional `PicleConfig` keys (for exampl
 | `prompt` | Prompt string |
 | `use_rich` | If `True` and Rich is installed, print via Rich console |
 | `newline` | Output newline, default `\r\n` |
-| `completekey` | Readline completion key name, default `tab` |
+| `completekey` | Enables interactive Tab completion; set to `None` to disable it, default `tab` |
 | `pipe` | Enables `|` and selects the pipe model (`"self"`, import string, or model class) |
 | `processors` | List of callables applied to the first command result |
 | `outputter` | Callable used to render output when not overridden |
 | `outputter_kwargs` | Extra kwargs passed into `outputter` |
-| `history_length` | Length of commands history to store for `history` output, default 100 |
+| `history_length` | Maximum number of commands written to the persistent history file, default 100; a negative value keeps all entries |
 | `history_file` | Filename to persistently store commands history, default `./picle_history.txt` |
 | `subshell` | If `True`, navigating to this model with no args enters a subshell (prompt changes, model is pushed onto a stack) |
 | `methods_override` | Dict of `{app_method_name: model_method_name}` used to override `App` methods at runtime |
+
+Interactive input uses one persistent `prompt_toolkit.PromptSession` for line editing,
+completion, cursor movement, and Up/Down history. Setting `App.use_rawinput = False`
+keeps the non-interactive `stdin.readline()` path and does not create a prompt session.
 
 ## `json_schema_extra` Field Level Configuration
 

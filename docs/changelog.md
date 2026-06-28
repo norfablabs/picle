@@ -1,3 +1,21 @@
+# 0.13.0
+
+## CHANGES
+
+1. Replaced `pyreadline3` with `prompt_toolkit` as PICLE's interactive line-editing backend. The new backend is used consistently on Windows, Linux, and macOS for terminal input, cursor movement, completion, and command history, while PICLE's existing parser and command dispatch remain unchanged.
+
+## BUGS
+
+1. Fixed Enter and newline rendering in the VS Code integrated terminal on Windows while retaining completion and persistent history.
+2. Routed multi-line and chat sub-prompts through the persistent prompt session so Ctrl+D continues to signal EOF on Windows.
+
+## ENHANCEMENTS
+
+1. Added a persistent `PromptSession` completion adapter that reuses PICLE's existing `completenames()` and `completedefault()` behavior without changing parsing or command dispatch.
+2. Added an interactive `?` key binding that displays contextual help immediately without submitting or changing the current command buffer. Each request preserves the visible command line above its help output, and pressing `?` twice shows verbose help.
+
+---
+
 # 0.12.2
 
 ## BUGS

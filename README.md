@@ -9,13 +9,15 @@
 PICLE helps you build interactive CLI shells from Pydantic v2 models.
 Think of it as: **your model tree becomes the command tree**.
 
-Built on top of Python's standard library [CMD module](https://docs.python.org/3/library/cmd.html) and
-uses [Pydantic](https://docs.pydantic.dev/) models to construct shell environments.
+Built on top of Python's standard library [CMD module](https://docs.python.org/3/library/cmd.html),
+[prompt_toolkit](https://python-prompt-toolkit.readthedocs.io/) for interactive input, and
+[Pydantic](https://docs.pydantic.dev/) models to construct shell environments.
 
 What you get out of the box:
 
 - command discovery + inline help (`?` / `??`)
 - tab completion (works well with nested commands)
+- editable, persistent command history
 - input validation via Pydantic
 - optional pipes (`|`) to post-process output
 
@@ -123,7 +125,7 @@ You *can* build REPL-like flows with these, but PICLE starts from the REPL/shell
 
 ## TUI / input toolkits
 
-- [prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit): amazing building block for input UX and advanced completion. PICLE uses `cmd` style shells and focuses on model-driven parsing/validation.
+- [prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit): PICLE uses it for portable line editing, history, and terminal input. PICLE adds the model-driven command tree, parsing, help, completion rules, validation, and dispatch.
 - [textual](https://github.com/Textualize/textual): awesome for full-screen TUIs (apps, dashboards). Different goal than a command shell.
 
 ## Output formatting helpers

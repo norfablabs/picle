@@ -1,5 +1,5 @@
 """
-Cpython 3.14 cmd.py copy. To account for pyreadline3 incompatibility.
+CPython 3.14 cmd.py copy, adapted to allow a custom interactive input backend.
 
 A generic class to build line-oriented command interpreters.
 
@@ -81,12 +81,10 @@ class Cmd:
     def __init__(self, completekey="tab", stdin=None, stdout=None):
         """Instantiate a line-oriented interpreter framework.
 
-        The optional argument 'completekey' is the readline name of a
-        completion key; it defaults to the Tab key. If completekey is
-        not None and the readline module is available, command completion
-        is done automatically. The optional arguments stdin and stdout
-        specify alternate input and output file objects; if not specified,
-        sys.stdin and sys.stdout are used.
+        The optional argument 'completekey' enables completion and defaults
+        to the Tab key. The optional arguments stdin and stdout specify
+        alternate input and output file objects; if not specified, sys.stdin
+        and sys.stdout are used.
 
         """
         if stdin is not None:
@@ -108,58 +106,36 @@ class Cmd:
         """
 
         self.preloop()
-        if self.use_rawinput and self.completekey:
-            try:
-                import readline
-
-                self.old_completer = readline.get_completer()
-                readline.set_completer(self.complete)
-                if hasattr(readline, "backend") and readline.backend == "editline":
-                    if self.completekey == "tab":
-                        # libedit uses "^I" instead of "tab"
-                        command_string = "bind ^I rl_complete"
-                    else:
-                        command_string = f"bind {self.completekey} rl_complete"
+        if intro is not None:
+            self.intro = intro
+        if self.intro:
+            self.stdout.write(str(self.intro) + "\n")
+        stop = None
+        while not stop:
+            if self.cmdqueue:
+                line = self.cmdqueue.pop(0)
+            else:
+                if self.use_rawinput:
+                    try:
+                        line = self._read_interactive_input(self.prompt)
+                    except EOFError:
+                        line = "EOF"
                 else:
-                    command_string = f"{self.completekey}: complete"
-                readline.parse_and_bind(command_string)
-            except ImportError:
-                pass
-        try:
-            if intro is not None:
-                self.intro = intro
-            if self.intro:
-                self.stdout.write(str(self.intro) + "\n")
-            stop = None
-            while not stop:
-                if self.cmdqueue:
-                    line = self.cmdqueue.pop(0)
-                else:
-                    if self.use_rawinput:
-                        try:
-                            line = input(self.prompt)
-                        except EOFError:
-                            line = "EOF"
+                    self.stdout.write(self.prompt)
+                    self.stdout.flush()
+                    line = self.stdin.readline()
+                    if not len(line):
+                        line = "EOF"
                     else:
-                        self.stdout.write(self.prompt)
-                        self.stdout.flush()
-                        line = self.stdin.readline()
-                        if not len(line):
-                            line = "EOF"
-                        else:
-                            line = line.rstrip("\r\n")
-                line = self.precmd(line)
-                stop = self.onecmd(line)
-                stop = self.postcmd(stop, line)
-            self.postloop()
-        finally:
-            if self.use_rawinput and self.completekey:
-                try:
-                    import readline
+                        line = line.rstrip("\r\n")
+            line = self.precmd(line)
+            stop = self.onecmd(line)
+            stop = self.postcmd(stop, line)
+        self.postloop()
 
-                    readline.set_completer(self.old_completer)
-                except ImportError:
-                    pass
+    def _read_interactive_input(self, prompt):
+        """Read one line from the active interactive input backend."""
+        return input(prompt)
 
     def precmd(self, line):
         """Hook method executed just before the command line is
@@ -262,36 +238,20 @@ class Cmd:
         dotext = "do_" + text
         return [a[3:] for a in self.get_names() if a.startswith(dotext)]
 
-    def complete(self, text, state):
-        """Return the next possible completion for 'text'.
-
-        If a command has not been entered, then complete against command list.
-        Otherwise try to call complete_<command> to get list of completions.
-        """
-        if state == 0:
-            import readline
-
-            origline = readline.get_line_buffer()
-            line = origline.lstrip()
-            stripped = len(origline) - len(line)
-            begidx = readline.get_begidx() - stripped
-            endidx = readline.get_endidx() - stripped
-            if begidx > 0:
-                cmd, args, foo = self.parseline(line)
-                if not cmd:
-                    compfunc = self.completedefault
-                else:
-                    try:
-                        compfunc = getattr(self, "complete_" + cmd)
-                    except AttributeError:
-                        compfunc = self.completedefault
+    def get_completion_matches(self, text, line, begidx, endidx):
+        """Return completion matches for the supplied input context."""
+        if begidx > 0:
+            cmd, args, foo = self.parseline(line)
+            if not cmd:
+                compfunc = self.completedefault
             else:
-                compfunc = self.completenames
-            self.completion_matches = compfunc(text, line, begidx, endidx)
-        try:
-            return self.completion_matches[state]
-        except IndexError:
-            return None
+                try:
+                    compfunc = getattr(self, "complete_" + cmd)
+                except AttributeError:
+                    compfunc = self.completedefault
+        else:
+            compfunc = self.completenames
+        return compfunc(text, line, begidx, endidx)
 
     def get_names(self):
         # This method used to pull in base class attributes

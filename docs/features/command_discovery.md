@@ -47,9 +47,14 @@ class Root(BaseModel):
 
 ## Inline Help
 
-Use `?` to show the next valid command field.
+Press `?` to show the next valid command field immediately. The current command
+stays in the input buffer so you can continue editing it after reading the help.
 
-Use `??` to show the same list with extra details such as defaults and field types.
+Press `?` twice to show the same list with extra details such as defaults and field
+types.
+
+The key is not inserted into the command buffer. This binding applies only to the
+main command prompt; `?` remains ordinary text in multi-line and chat input.
 
 ```text
 picle#devices?
@@ -99,7 +104,8 @@ picle#help dev
 
 ## Tab Completion
 
-Tab completion is available through the standard `cmd.Cmd` hooks.
+Tab completion uses `prompt_toolkit` for terminal input and delegates candidates to
+PICLE's existing `cmd`-style `completenames()` and `completedefault()` hooks.
 
 - The first token completes top-level fields and built-in commands such as `exit`, `top`, and `help`.
 - Nested completion works after you have already entered part of a command path.

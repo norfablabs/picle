@@ -13,6 +13,7 @@ Inside chat mode:
   - /reset
   - /exit
 """
+
 import time
 
 from typing import Any
@@ -52,9 +53,7 @@ class ChatShowCommands(BaseModel):
 
     @staticmethod
     def show_usage() -> str:
-        return (
-            "Current usage  1234 tokens."
-        )
+        return "Current usage  1234 tokens."
 
     @staticmethod
     def show_status() -> str:

@@ -95,7 +95,7 @@ PICLE exposes several global shell commands:
 - `end`: terminate the application immediately.
 - `pwd`: print the current shell path.
 - `cls`: clear the terminal screen.
-- `history`: print command history when readline support is available.
+- `history`: print command history.
 
 ```text
 devices[cli]#pwd
@@ -110,5 +110,6 @@ picle#
 
 Notes:
 
-- `history` uses `readline` on Unix-like systems and `pyreadline3` on Windows when installed.
+- Interactive history uses the same persistent `prompt_toolkit` session on Linux, macOS, and Windows.
+- `PicleConfig.history_file` selects the history file, and `history_length` limits the number of entries written when the shell exits.
 - History output skips meta commands such as `help`, `history`, `exit`, and commands ending in `?`.

@@ -571,6 +571,7 @@ def test_json_field_in_quotes():
         in shell_output
     )
 
+
 def test_json_field_boolean_true():
     shell.onecmd("top")  # go to top
     shell.onecmd("""test_json_input data true arg foo""")
@@ -612,6 +613,22 @@ def test_multiline_input_with_inline_value():
     print(f"shell output: '{shell_output}'")
 
     assert "{'data': 'foo', 'arg': 'bar'}" in shell_output
+
+
+def test_multiline_input_exits_on_prompt_session_eof():
+    shell.onecmd("top")
+    mock_stdout.write.reset_mock()
+
+    with unittest.mock.patch.object(
+        shell,
+        "_read_interactive_input",
+        side_effect=["line 1", "line 2", EOFError],
+    ) as input_reader:
+        shell.onecmd("test_multiline_input data load-terminal")
+
+    shell_output = "".join(str(call[0][0]) for call in mock_stdout.write.call_args_list)
+    assert "'data': 'line 1\\nline 2'" in shell_output
+    assert input_reader.call_count == 3
 
 
 def test_outputter_result_specific():
@@ -1641,8 +1658,10 @@ def test_chat_shell_passes_additional_argument_to_run():
     shell.onecmd("top")
     mock_stdout.write.reset_mock()
 
-    with unittest.mock.patch(
-        "builtins.input", side_effect=["hello", "world", EOFError]
+    with unittest.mock.patch.object(
+        shell,
+        "_read_interactive_input",
+        side_effect=["hello", "world", EOFError],
     ):
         shell.onecmd("test_chat_interface_2 session_id session-123")
 
@@ -1657,8 +1676,10 @@ def test_chat_shell_keeps_additional_argument_after_slash_command():
     shell.onecmd("top")
     mock_stdout.write.reset_mock()
 
-    with unittest.mock.patch(
-        "builtins.input", side_effect=["hello", "/show usage", "again", EOFError]
+    with unittest.mock.patch.object(
+        shell,
+        "_read_interactive_input",
+        side_effect=["hello", "/show usage", "again", EOFError],
     ):
         shell.onecmd("test_chat_interface_2 session_id session-456")
 
