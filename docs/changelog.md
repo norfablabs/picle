@@ -1,3 +1,11 @@
+# 0.13.1 (draft)
+
+## ENHANCEMENTS
+
+1. Added optional synchronous `chat_on_enter(**kwargs)` and `chat_on_exit(**kwargs)` methods on chat command models to initialize and release application context once per session. Hooks receive the same resolved keyword arguments as the message handler.
+
+---
+
 # 0.13.0
 
 ## CHANGES

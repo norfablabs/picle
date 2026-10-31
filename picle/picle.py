@@ -1589,19 +1589,25 @@ class App(picle_cmd.Cmd):
                         chat_commands_model = getattr(
                             picle_config, "chat_commands_model", None
                         )
-                        if chat_commands_model:
-                            self.shell = chat_commands_model
-                            self.shells.append(chat_commands_model)
                         kw = {}
                         kw.update(self.shell_defaults)
                         kw.update(command_defaults)
                         kw.update(command_arguments)
-                        return self._run_chat_shell(
-                            run_function=run_function,
-                            kw=kw,
-                            picle_config=picle_config,
-                            chat_commands_model=chat_commands_model,
-                        )
+                        if hasattr(model, "chat_on_enter"):
+                            model.chat_on_enter(**kw)
+                        try:
+                            if chat_commands_model:
+                                self.shell = chat_commands_model
+                                self.shells.append(chat_commands_model)
+                            return self._run_chat_shell(
+                                run_function=run_function,
+                                kw=kw,
+                                picle_config=picle_config,
+                                chat_commands_model=chat_commands_model,
+                            )
+                        finally:
+                            if hasattr(model, "chat_on_exit"):
+                                model.chat_on_exit(**kw)
 
                     # build kwargs and call the method
                     kw = {}

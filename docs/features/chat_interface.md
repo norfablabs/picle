@@ -51,6 +51,53 @@ The loop continues until the user presses **Ctrl+D** (EOF) or types `/exit`.
 
 For comprehensive chat app example refer to [sample chat app in PICLE test folder](https://github.com/dmulyalin/picle/blob/master/test/example_chat_app.py)
 
+## Session hooks
+
+Define optional synchronous `chat_on_enter(**kwargs)` and
+`chat_on_exit(**kwargs)` methods on the chat command model, outside
+`PicleConfig`, to manage application-owned context:
+
+```python
+context = {}
+
+
+class AgentModel(BaseModel):
+    topic: str = "general"
+
+    @staticmethod
+    def chat_on_enter(**kwargs):
+        context["topic"] = kwargs["topic"]
+
+    @staticmethod
+    def chat_on_exit(**kwargs):
+        context.clear()
+
+    @staticmethod
+    def run(message, **kwargs):
+        return f"{context['topic']}: {message}"
+
+    class PicleConfig:
+        chat_shell = True
+```
+
+Entry runs once after validation and before the first input, so slash
+commands and completion sources can use the initialized context. Exit runs
+once when the chat loop ends, including on `/exit`, EOF,
+Ctrl+C, handler termination, or an escaping error. Errors handled inside the
+message loop leave the session open. Reopening chat runs the hooks again.
+
+Both hooks receive the message handler's resolved keyword arguments, without
+its positional message: shell defaults, then command defaults, then explicit
+arguments. Existing argument names and alias handling apply. Return values
+are ignored. Either hook can be omitted; normal class inheritance works.
+Hooks are looked up on the chat command model, with no fallback to command
+parents or the mounted slash-command model.
+
+Validation failure runs neither hook. If entry raises, PICLE reports the
+error without reading input or calling exit; the application is responsible
+for cleaning up partial initialization. Exit errors are reported through the
+normal command exception handler and override any pending chat return value.
+
 ## PicleConfig options
 
 | Option | Default | Description |

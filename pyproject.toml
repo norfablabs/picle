@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "picle"
-version = "0.12.3"
+version = "0.13.0"
 description = "Python Interactive Command Line Shells"
 authors = ["Denis Mulyalin <d.mulyalin@gmail.com>"]
 license = "MIT"
