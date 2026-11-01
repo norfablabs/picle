@@ -9,6 +9,12 @@ from pydantic import BaseModel
 from prompt_toolkit.application import Application, create_app_session
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
+from prompt_toolkit.formatted_text import (
+    HTML,
+    ANSI,
+    FormattedText,
+    fragment_list_to_text,
+)
 
 from picle import App, ChatSession
 
@@ -361,3 +367,132 @@ def test_footer_replaces_persists_and_clears_without_scrollback(monkeypatch):
     assert "operation failed" in app.stdout.getvalue()
     sessions[0].set_footer("late")
     assert sessions[0]._events.empty()
+
+
+@pytest.mark.parametrize(
+    "footer",
+    [
+        "Connected",
+        HTML("<b>Connected</b>"),
+        ANSI("\x1b[32mConnected\x1b[0m"),
+        FormattedText([("bold fg:green", "Connected")]),
+        lambda: HTML("<i>Connected</i>"),
+    ],
+)
+def test_footer_accepts_prompt_toolkit_formatted_text(monkeypatch, footer):
+    release = threading.Event()
+    captured = []
+
+    class Chat(BaseModel):
+        @staticmethod
+        def run(message, chat):
+            chat.set_footer(footer)
+            assert release.wait(timeout=5)
+            return None
+
+        class PicleConfig:
+            chat_shell = True
+
+    class Root(BaseModel):
+        chat: Chat = None
+
+    app = App(Root, stdout=io.StringIO())
+    sent = []
+    with create_pipe_input() as source:
+
+        def rendered(ui):
+            if ui.is_done:
+                return
+            if not sent:
+                source.send_text("hello\r")
+                sent.append(True)
+            elif app._chat_shell._footer and not captured:
+                for window in ui.layout.visible_windows:
+                    fragments = window.content.create_content(40, 1).get_line(0)
+                    if fragment_list_to_text(fragments) == "Connected":
+                        captured.extend(fragments)
+                        release.set()
+
+        monkeypatch.setattr(
+            "picle.chat.Application",
+            lambda **kw: Application(**kw, after_render=rendered),
+        )
+        with create_app_session(input=source, output=DummyOutput()):
+            app.onecmd("chat")
+    assert fragment_list_to_text(captured) == "Connected", app.stdout.getvalue()
+    if not isinstance(footer, str):
+        assert any(style for style, *_ in captured)
+
+
+def test_status_spinner_and_elapsed_time_refresh_and_reset(monkeypatch):
+    clock = [100.0]
+    monkeypatch.setattr("picle.chat.monotonic", lambda: clock[0])
+    release = threading.Event()
+    next_status = threading.Event()
+    cleared = threading.Event()
+    frames = []
+
+    class Chat(BaseModel):
+        @staticmethod
+        def run(message, chat):
+            chat.set_status("Working", spinner=True, elapsed=True)
+            assert release.wait(timeout=5)
+            chat.set_status("Next", elapsed=True)
+            assert next_status.wait(timeout=5)
+            chat.set_status(spinner=True, elapsed=True)
+            assert cleared.wait(timeout=5)
+            return "done"
+
+        class PicleConfig:
+            chat_shell = True
+
+    class Root(BaseModel):
+        chat: Chat = None
+
+    app = App(Root, stdout=io.StringIO())
+    app.use_rich = False
+    sent = []
+    with create_pipe_input() as source:
+
+        def rendered(ui):
+            if ui.is_done:
+                return
+            if not sent:
+                source.send_text("hello\r")
+                sent.append(True)
+            elif app._chat_shell._status == "Working":
+                text = fragment_list_to_text(
+                    ui.layout.visible_windows[0]
+                    .content.create_content(60, 1)
+                    .get_line(0)
+                )
+                if not frames:
+                    frames.append(text)
+                    clock[0] = 112.6
+                    ui.invalidate()
+                elif len(frames) == 1:
+                    frames.append(text)
+                    release.set()
+            elif app._chat_shell._status == "Next":
+                assert app._chat_shell._status_started == clock[0]
+                assert app._chat_shell._spinner is False
+                next_status.set()
+            elif app._chat_shell._busy and next_status.is_set():
+                assert app._chat_shell._status == ""
+                assert app._chat_shell._spinner is False
+                assert app._chat_shell._status_started is None
+                cleared.set()
+            elif not app._chat_shell._busy and frames and sent == [True]:
+                assert app._chat_shell._status_started is None
+                source.send_text("/exit\r")
+                sent.append(False)
+
+        monkeypatch.setattr(
+            "picle.chat.Application",
+            lambda **kw: Application(**kw, after_render=rendered),
+        )
+        with create_app_session(input=source, output=DummyOutput()):
+            app.onecmd("chat")
+    assert frames[0] == "Working...  00:00"
+    assert frames[1] == "Working.    00:12"
+    assert "Working" not in app.stdout.getvalue()

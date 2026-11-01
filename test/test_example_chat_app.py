@@ -38,6 +38,36 @@ def test_chat_echo_uses_session_and_user():
     assert MockChatState.history == ["hello world"]
 
 
+def test_chat_rich_objects_render_in_sample_app(monkeypatch):
+    rich_console = pytest.importorskip("rich.console")
+    from io import StringIO
+
+    shell, _ = _new_shell()
+    shell.use_rich = True
+    rendered = StringIO()
+    monkeypatch.setattr(
+        "picle.picle.RICHCONSOLE",
+        rich_console.Console(
+            file=rendered,
+            force_terminal=True,
+            color_system="truecolor",
+            no_color=False,
+            legacy_windows=False,
+            width=80,
+        ),
+    )
+    with unittest.mock.patch.object(
+        shell, "_read_interactive_input", side_effect=["rich", "/exit"]
+    ):
+        shell.onecmd("chat session_id demo user alice")
+    output = rendered.getvalue()
+    assert "Rich progress message" in output
+    assert "\x1b[1;32m" in output
+    assert "Step" in output and "Status" in output
+    assert "Example" in output and "Complete" in output
+    assert output.count("Rich output complete") == 1
+
+
 def test_chat_slash_show_commands_are_dispatched():
     MockChatState.reset()
     shell, mock_stdout = _new_shell()

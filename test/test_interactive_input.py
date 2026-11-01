@@ -53,6 +53,60 @@ def test_cmdloop_preserves_cmdqueue_and_noninteractive_input():
     ]
 
 
+def test_cmdloop_uses_input_override_and_stdlib_command_dispatch(monkeypatch):
+    events = []
+
+    class TestCmd(Cmd):
+        def _read_interactive_input(self, prompt):
+            events.append(("read", prompt))
+            raise EOFError
+
+        def do_echo(self, arg):
+            events.append(("echo", arg))
+
+        def do_EOF(self, arg):
+            events.append(("EOF", arg))
+            return True
+
+        def preloop(self):
+            events.append("start")
+
+        def postloop(self):
+            events.append("stop")
+
+    monkeypatch.setattr(
+        "builtins.input", lambda *args: pytest.fail("must use the input override")
+    )
+    shell = TestCmd(stdout=StringIO())
+    shell.cmdqueue.append("echo queued")
+    shell.cmdloop(intro="Ready")
+    assert events == [
+        "start",
+        ("echo", "queued"),
+        ("read", shell.prompt),
+        ("EOF", ""),
+        "stop",
+    ]
+    assert shell.stdout.getvalue() == "Ready\n"
+
+
+def test_completion_router_preserves_standard_command_hooks():
+    class TestCmd(Cmd):
+        def do_echo(self, arg):
+            return None
+
+        def complete_echo(self, text, line, begidx, endidx):
+            return ["specific"]
+
+        def completedefault(self, text, line, begidx, endidx):
+            return ["fallback"]
+
+    shell = TestCmd(stdout=StringIO())
+    assert shell.get_completion_matches("ec", "ec", 0, 2) == ["echo"]
+    assert shell.get_completion_matches("", "echo ", 5, 5) == ["specific"]
+    assert shell.get_completion_matches("", "unknown ", 8, 8) == ["fallback"]
+
+
 def test_prompt_toolkit_completer_adapts_document_context():
     class CompletionApp:
         context = None

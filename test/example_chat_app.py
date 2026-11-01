@@ -100,8 +100,19 @@ class MockChatAgent(BaseModel):
         normalized = message.strip()
         if normalized.lower() == "bye":
             return None
+        if normalized.lower() == "rich":
+            try:
+                from rich.text import Text
+                from rich.table import Table
+            except ImportError:
+                return "Install Rich to try this example: poetry install -E full"
+            chat.write(Text("Rich progress message", style="bold green"))
+            table = Table("Step", "Status")
+            table.add_row("Example", "Complete")
+            chat.write(table)
+            return "Rich output complete"
         if normalized.lower() in {"work", "fail"}:
-            chat.set_status("Working...", spinner=True)
+            chat.set_status("Working...", spinner=True, elapsed=True)
             chat.write("Starting operation")
             time.sleep(1)
             if normalized.lower() == "fail":

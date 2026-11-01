@@ -1,12 +1,18 @@
 """Multiline chat editor and execution loop used by PICLE's App."""
 
 import asyncio
+from functools import partial
 from concurrent.futures import Future
+from time import monotonic
 from typing import Any, Optional
 
 from prompt_toolkit import Application
 from prompt_toolkit.application import get_app, run_in_terminal
 from prompt_toolkit.filters import Condition
+from prompt_toolkit.formatted_text import (
+    AnyFormattedText,
+    to_formatted_text,
+)
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import (
     ConditionalContainer,
@@ -32,16 +38,24 @@ class ChatSession:
         self._loop = None
         self._approval = None
 
-    def write(self, text: str) -> None:
-        """Append a plain-text output entry above the editor."""
+    def write(self, text: Any) -> None:
+        """Append plain text or an object supported by App.write()."""
         if not self._closed:
             self._loop.call_soon_threadsafe(self._events.put_nowait, ("write", text))
 
-    def set_status(self, text: str = "", spinner: bool = False) -> None:
+    def set_status(
+        self, text: str = "", spinner: bool = False, elapsed: bool = False
+    ) -> None:
         """Replace the temporary status line; empty text clears it."""
         if not self._closed:
             self._loop.call_soon_threadsafe(
-                self._events.put_nowait, ("status", text, bool(text) and spinner)
+                self._events.put_nowait,
+                (
+                    "status",
+                    text,
+                    bool(text) and spinner,
+                    monotonic() if text and elapsed else None,
+                ),
             )
 
     def approve(self, prompt: str) -> bool:
@@ -54,8 +68,8 @@ class ChatSession:
         )
         return self._approval.result()
 
-    def set_footer(self, text: str = "") -> None:
-        """Replace the single-line footer; empty text hides it."""
+    def set_footer(self, text: AnyFormattedText = "") -> None:
+        """Set plain or prompt-toolkit formatted footer content."""
         if not self._closed:
             self._loop.call_soon_threadsafe(self._events.put_nowait, ("footer", text))
 
@@ -70,6 +84,7 @@ class ChatShell:
         self._busy = False
         self._status = ""
         self._spinner = False
+        self._status_started = None
         self._approval = None
 
     def run(
@@ -89,6 +104,7 @@ class ChatShell:
         self._footer = ""
         self._busy = False
         self._status = ""
+        self._status_started = None
         self._approval = None
         editor = TextArea(
             multiline=True,
@@ -167,22 +183,29 @@ class ChatShell:
                 try:
                     if event[0] == "write":
                         text = event[1]
-                        await run_in_terminal(
-                            lambda: (
-                                app.stdout.write(
-                                    text + ("" if text.endswith("\n") else app.newline)
-                                ),
-                                app.stdout.flush(),
+                        if isinstance(text, str):
+                            await run_in_terminal(
+                                lambda: (
+                                    app.stdout.write(
+                                        text
+                                        + ("" if text.endswith("\n") else app.newline)
+                                    ),
+                                    app.stdout.flush(),
+                                )
                             )
-                        )
+                        else:
+                            await run_in_terminal(partial(app.write, text))
                     elif event[0] == "status":
-                        self._status, self._spinner = event[1:]
+                        self._status, self._spinner, self._status_started = event[1:]
                     elif event[0] == "footer":
+                        to_formatted_text(event[1])
                         self._footer = event[1]
                     else:
                         self._approval = event[1:]
                         ui.layout.focus(approval_control)
                     ui.invalidate()
+                except Exception as error:
+                    await run_in_terminal(partial(app.write_error, str(error)))
                 finally:
                     session._events.task_done()
 
@@ -222,6 +245,7 @@ class ChatShell:
                     failure = error
                 await session._events.join()
                 self._status = ""
+                self._status_started = None
                 self._spinner = False
                 if failure is not None:
                     await run_in_terminal(lambda: app.write_error(str(failure)))
@@ -263,6 +287,7 @@ class ChatShell:
                     session._approval.set_result(False)
                 self._approval = None
                 self._status = ""
+                self._status_started = None
                 self._spinner = False
                 self._busy = False
                 if not ui.is_done:
@@ -289,15 +314,27 @@ class ChatShell:
                                 Window(
                                     height=1,
                                     content=FormattedTextControl(
-                                        lambda: (
-                                            (
-                                                "|/-\\"[get_app().render_counter % 4]
-                                                + " "
-                                            )
+                                        lambda: self._status
+                                        + (
+                                            (".", "..", "...")[
+                                                int(monotonic() * 2) % 3
+                                            ].ljust(3)
                                             if self._spinner
                                             else ""
                                         )
-                                        + self._status
+                                        + (
+                                            "  {:02d}:{:02d}".format(
+                                                *divmod(
+                                                    int(
+                                                        monotonic()
+                                                        - self._status_started
+                                                    ),
+                                                    60,
+                                                )
+                                            )
+                                            if self._status_started is not None
+                                            else ""
+                                        )
                                     ),
                                 ),
                                 filter=Condition(lambda: bool(self._status)),
@@ -338,6 +375,7 @@ class ChatShell:
             if session._approval is not None and not session._approval.done():
                 session._approval.set_result(False)
             self._status = ""
+            self._status_started = None
             self._approval = None
             self._busy = False
             app.is_chat = False

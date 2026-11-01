@@ -1,7 +1,7 @@
 # Chat Interface
 
-Chat mode lets users exchange messages with an agent while running commands
-without leaving the conversation. The message editor stays visible while a
+Use chat mode to exchange messages with an agent and run commands without
+leaving the conversation. The message editor stays visible while a
 response is being prepared. Progress, status and approval requests appear
 above it.
 
@@ -43,7 +43,8 @@ poetry run python -m test.example_chat_app
 ```
 
 Then enter `chat session_id demo user alice`. Try `work` for progress updates,
-`fail` for an example error, or `approve` for an approval request.
+`fail` for an example error, `approve` for an approval request, or `rich`
+for styled text and a table (requires Rich).
 
 ## Writing messages
 
@@ -55,7 +56,7 @@ Then enter `chat session_id demo user alice`. Try `work` for progress updates,
 | Arrow keys | Move within the message; Up/Down also recall earlier chat input. |
 
 Paste or type several lines, edit them, then press Enter to send the complete
-message. Indentation and surrounding whitespace are preserved. Pressing Enter
+message. Spaces, tabs and line breaks are kept as entered. Pressing Enter
 on empty or whitespace-only input does nothing.
 
 The editor shows five text rows by default, wraps long lines and scrolls as
@@ -149,8 +150,7 @@ class AgentModel(BaseModel):
 
 In this example, `/usage` displays the custom usage report. It is not a
 built-in command. Type `/exit` to leave chat. Commands that ask for additional
-input may temporarily
-hide the message editor until that input is complete.
+input may temporarily hide the message editor until you finish answering.
 
 A message containing any line break is always sent to the agent, even if it
 starts with `/` or has only a trailing newline. Nested chats and shell
@@ -165,7 +165,7 @@ class AgentModel(BaseModel):
     @staticmethod
     def run(message, chat, **kwargs):
         chat.set_footer("Model: local | Session: demo")
-        chat.set_status("Working...", spinner=True)
+        chat.set_status("Thinking", spinner=True, elapsed=True)
         chat.write("Checking the request")
         if not chat.approve("Allow this action?"):
             return "Action denied"
@@ -178,19 +178,136 @@ class AgentModel(BaseModel):
 
 | Method | Use |
 |--------|-----|
-| `chat.write(text)` | Add a plain-text progress message above the editor. Embedded newlines are preserved; a final newline is optional. |
-| `chat.set_status(text="", spinner=False)` | Replace the temporary status line. Set `spinner=True` to show activity, or call with no text to clear it. Status also clears when the operation finishes. |
-| `chat.set_footer(text="")` | Replace the single-line footer below the editor. It stays between messages, including after an error. Call with no text to hide it. Long text is clipped to the available width. |
+| `chat.write(text)` | Add a progress message above the editor. Accepts plain strings or Rich renderables. Embedded newlines are preserved; a final newline is optional. |
+| `chat.set_status(text="", spinner=False, elapsed=False)` | Replace the temporary status line. Use `spinner=True` for activity and `elapsed=True` for elapsed minutes and seconds. Replacing the status resets the timer. Call with no text to clear it; status also clears when the operation finishes. |
+| `chat.set_footer(text="")` | Replace the single-line footer below the editor. Accepts plain strings or prompt-toolkit formatted text. It stays between messages, including after an error. Call with no text to hide it. Long text is clipped to the available width. |
 | `chat.approve(prompt)` | Ask the user to press **Y** to Allow or **N** to Deny. Returns `True` or `False`. |
 
-An approval waits for the user's choice before continuing. While it is
-pending, keyboard input answers the approval; afterward, the message editor
-is active again. Ask for one approval at a time. If chat closes unexpectedly,
-a pending approval is denied.
+Use the following examples inside `run(message, chat, **kwargs)`. Plain
+strings are displayed as written. For styled output, use Rich objects with
+`write()` or prompt-toolkit formatted text with `set_footer()`.
 
-Call these methods directly from `run()`, not from hooks or background
-callbacks. Declare `chat` explicitly: `**kwargs` alone does not receive it.
-Do not use `chat` as the name of a user-supplied command argument.
+=== "Write"
+
+    Add progress messages above the editor. Each call adds a new entry;
+    embedded newlines are preserved.
+
+    **Plain text**
+
+    ```python
+    chat.write("Checking the request")
+    chat.write("Step 1 complete\nStarting step 2")
+    ```
+
+    **Styled text with Rich**
+
+    With Rich installed and `use_rich = True`, you can also write styled text,
+    tables and panels:
+
+    ```python
+    from rich.text import Text
+    from rich.table import Table
+
+    chat.write(Text("Request accepted", style="bold green"))
+
+    table = Table("Step", "Result")
+    table.add_row("Check request", "Passed")
+    chat.write(table)
+    ```
+
+    Without Rich output enabled, objects are shown as their plain string
+    representation. Return the final answer normally instead of also writing
+    it here.
+
+=== "Status"
+
+    Show a temporary message while work is in progress:
+
+    ```python
+    chat.set_status("Checking the request")
+    ```
+
+    Show cycling dots after the text, followed by elapsed time, such as
+    `Thinking...  00:12`:
+
+    ```python
+    chat.set_status("Thinking", spinner=True, elapsed=True)
+    # Perform your operation here.
+    ```
+
+    Replace or clear the status:
+
+    ```python
+    chat.set_status("Finishing...")  # replaces the previous status
+    chat.set_status()               # clears it
+    ```
+
+    Replacing the status resets its timer. Status clears automatically when
+    the operation finishes. Status text accepts plain strings.
+
+=== "Footer"
+
+    Show session information below the editor. Setting a footer replaces its
+    previous content; it stays between messages until replaced or cleared.
+
+    **Plain text**
+
+    ```python
+    chat.set_footer("Model: local | Session: demo")
+    ```
+
+    **Prompt-toolkit formatted text**
+
+    ```python
+    from prompt_toolkit.formatted_text import HTML
+
+    chat.set_footer(HTML("<b>Model:</b> local | <ansigreen>Connected</ansigreen>"))
+    ```
+
+    Hide the footer:
+
+    ```python
+    chat.set_footer()
+    ```
+
+    The footer occupies one row; long content is clipped. It resets when the
+    chat session ends.
+
+For more footer styles, you can also use prompt-toolkit `ANSI`,
+`FormattedText`, styled text fragments, or a function that returns formatted
+text. The footer stays one row high regardless of the content.
+
+### Supported content types
+
+| Method | Plain strings | Prompt-toolkit formatted text | Rich objects |
+|--------|---------------|-------------------------------|--------------|
+| `chat.write()` | Yes | **Not supported** | Yes, when Rich is installed and `use_rich = True`; otherwise shown as a string |
+| `chat.set_footer()` | Yes | Yes: `HTML`, `ANSI`, `FormattedText`, styled fragments and callables | **Not supported**, including Rich `Text` |
+| `chat.set_status()` | Yes | **Not supported** | **Not supported**, including Rich `Text` and Rich spinners |
+
+For a styled footer, use prompt-toolkit `HTML` or `FormattedText`. For status
+animation and timing, use the `spinner=True` and `elapsed=True` arguments.
+Rich renderables such as `Text`, `Panel` and `Table` can be passed to
+`write()`, but not to status or footer. `Console`, `Live` and prompt-toolkit
+layout widgets are not supported.
+
+Strings are always plain text: `"[green]Ready[/green]"` and `"<b>Ready</b>"`
+are displayed literally rather than interpreted as markup.
+
+### Asking for approval
+
+Call `chat.approve("Allow this action?")` before an action that needs the
+user's permission. Pressing **Y** returns `True`; pressing **N** returns
+`False`. Your handler waits for that choice before continuing.
+
+While the request is visible, the keyboard answers it. After the choice,
+you can edit messages again. Ask for one approval at a time. If chat closes
+unexpectedly, the request is denied.
+
+Use these methods only inside `run()`. Add `chat` to its parameter list;
+`**kwargs` alone does not receive it. Hooks and background callbacks cannot
+use the session methods. Keep the name `chat` for this parameter rather than
+using it for a command argument.
 
 Return the final answer normally; do not also send it with `chat.write()`.
 Response prefixes, styles and outputters continue to apply. Return a complete
@@ -226,7 +343,8 @@ class AgentModel(BaseModel):
         chat_shell = True
 ```
 
-Each hook runs once per session. Either may be omitted. Both receive command
+The entry hook runs once before the first message, and the exit hook runs
+once when the session ends. You can define either hook or both. Both receive command
 arguments and defaults, with explicit arguments taking precedence. They do
 not receive the `chat` object, and their return values are ignored.
 

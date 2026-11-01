@@ -99,7 +99,8 @@ editor controls and a Shift+Enter terminal mapping example.
 
 The active handler receives a `ChatSession` when it explicitly declares a
 named `chat` parameter. Lifecycle hooks do not receive the session object. `**kwargs` alone
-does not enable injection. Progress is plain text; response outputters continue
+does not enable injection. Progress accepts plain strings. Footers accept strings and prompt-toolkit
+formatted text; status accepts plain strings. Response outputters continue
 to render the returned final answer. See [Chat Interface](features/chat_interface.md)
 for status, approval controls and busy-input behavior.
 

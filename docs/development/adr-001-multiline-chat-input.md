@@ -163,8 +163,12 @@ Streaming responses are removed. Handlers return complete answers, rendered
 once using the existing outputter path. Arbitrary print/log capture, Rich Live,
 cooperative cancellation and transcript navigation remain outside this scope.
 
-`ChatSession.set_footer(text="")` replaces an optional plain-text row below
+`ChatSession.set_footer(text="")` replaces an optional row below
 the bottom separator. It persists between messages and handler errors until
 replaced or cleared, and resets when the session ends. Long content is clipped
 without wrapping; a visible footer reduces the editor's available height by
 one row. It uses the existing event queue and requires no additional setting.
+
+`write()` accepts plain strings. Footers accept strings and prompt-toolkit
+formatted text; status accepts plain strings. Layout widgets and Rich objects
+are outside the session interface.

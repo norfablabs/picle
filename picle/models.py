@@ -920,7 +920,7 @@ class MAN(BaseModel):
     )
 
     @staticmethod
-    def _construct_model_tree(model, tree: RICHTREE, path: list) -> RICHTREE:
+    def _construct_model_tree(model, tree: "RICHTREE", path: list) -> "RICHTREE":
         """
         Recursively construct a Rich tree for a shell model.
 

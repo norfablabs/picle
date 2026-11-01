@@ -5,6 +5,7 @@
 1. Chat now keeps one input layout alive during operations. Handlers run off the UI thread; input stays editable, while submission and Ctrl+C/Ctrl+D termination are disabled until the operation finishes.
 2. Removed chat streaming responses. Handlers return complete answers and can report intermediate progress through `ChatSession.write()`.
 3. Removed `/end` from chat commands, completion and help. Use `/exit` to leave chat; the normal shell's `end` command remains available.
+4. Replaced the bundled copy of Python's command interpreter with a thin `cmd.Cmd` subclass. Retained PICLE's interactive input, command-loop and completion adaptations while using standard-library parsing, dispatch and help utilities.
 
 ## BUGS
 
@@ -13,6 +14,7 @@
 3. Stop collecting compact JSON once its closing delimiter is present, preserving following arguments and pipe commands.
 4. Prevent `top` and subshell `exit` from raising an error when `PicleConfig` does not define `prompt`.
 5. Honor termination results from custom chat slash commands and run the chat exit hook once.
+6. Fixed importing PICLE without Rich installed by deferring the command-tree type annotation.
 
 ## ENHANCEMENTS
 
