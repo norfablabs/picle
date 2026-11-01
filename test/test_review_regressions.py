@@ -107,7 +107,8 @@ def test_navigation_with_root_config_without_prompt(navigation):
     assert app.prompt == prompt
 
 
-def test_chat_end_propagates_termination_and_runs_exit_hook(monkeypatch):
+@pytest.mark.usefixtures("scripted_chat")
+def test_chat_end_is_rejected_and_exit_runs_hook_once(monkeypatch):
     exit_hook = Mock()
 
     class Chat(BaseModel):
@@ -124,8 +125,21 @@ def test_chat_end_propagates_termination_and_runs_exit_hook(monkeypatch):
         chat: Chat = None
 
     app = App(Root, stdout=io.StringIO())
-    read = Mock(side_effect=["/end", EOFError])
+    app.use_rich = False
+    read = Mock(side_effect=["/end", "/exit"])
     monkeypatch.setattr(app, "_read_interactive_input", read)
-    assert app.onecmd("chat") is True
-    assert read.call_count == 1
+    assert app.onecmd("chat") is None
+    assert read.call_count == 2
+    assert "Use /exit" in app.stdout.getvalue()
     exit_hook.assert_called_once_with()
+
+
+def test_end_completion_is_available_only_outside_chat():
+    class Root(BaseModel):
+        pass
+
+    app = App(Root, stdout=io.StringIO())
+    assert "end " in app.completenames("e", "e", 0, 1)
+    app.is_chat = True
+    assert "/end " not in app.completenames("/e", "/e", 0, 2)
+    assert "/exit " in app.completenames("/e", "/e", 0, 2)

@@ -3,6 +3,7 @@
 from io import StringIO
 
 import pytest
+from types import SimpleNamespace
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import create_app_session
 from prompt_toolkit.completion import CompleteEvent
@@ -229,16 +230,23 @@ def test_chat_editor_edits_and_submits_one_buffer(keys, expected):
     shell._history = _PicleHistory(None, 100)
     with create_pipe_input() as pipe_input:
         with create_app_session(input=pipe_input, output=DummyOutput()):
-            pipe_input.send_text(keys + "normal\r")
-            assert shell._read_interactive_input("You> ", chat=True) == expected
+            pipe_input.send_text(keys)
+            received = []
+            shell._chat_shell.run(
+                lambda message: received.append(message),
+                {},
+                SimpleNamespace(chat_prompt="You> "),
+            )
+            assert received == [expected]
+            pipe_input.send_text("normal\r")
             assert shell._read_interactive_input("") == "normal"
     assert expected in shell._chat_history.get_strings()
     assert expected not in shell._history.get_strings()
     assert expected in shell.stdout.getvalue()
 
 
-@pytest.mark.parametrize("key,error", [("\x03", KeyboardInterrupt), ("\x04", EOFError)])
-def test_chat_editor_interrupts(key, error):
+@pytest.mark.parametrize("key,result", [("\x03", True), ("\x04", None)])
+def test_chat_editor_interrupts(key, result):
     class Root(BaseModel):
         pass
 
@@ -246,8 +254,10 @@ def test_chat_editor_interrupts(key, error):
     with create_pipe_input() as pipe_input:
         with create_app_session(input=pipe_input, output=DummyOutput()):
             pipe_input.send_text(key)
-            with pytest.raises(error):
-                shell._read_interactive_input("", chat=True)
+            assert (
+                shell._chat_shell.run(lambda message: None, {}, SimpleNamespace())
+                is result
+            )
 
 
 def test_multiline_history_is_kept_only_in_memory(tmp_path):
@@ -275,7 +285,11 @@ def test_chat_history_is_separate_from_persisted_shell_history(tmp_path):
     with create_pipe_input() as pipe_input:
         with create_app_session(input=pipe_input, output=DummyOutput()):
             pipe_input.send_text("hello chat\r")
-            assert shell._read_interactive_input("", chat=True) == "hello chat"
+            received = []
+            shell._chat_shell.run(
+                lambda message: received.append(message), {}, SimpleNamespace()
+            )
+            assert received == ["hello chat"]
     shell.postloop()
     assert shell._chat_history.get_strings() == ["hello chat"]
     assert shell._history.get_strings() == ["show status"]
@@ -285,37 +299,49 @@ def test_chat_history_is_separate_from_persisted_shell_history(tmp_path):
 def test_chat_editor_completion_and_multiline_history(monkeypatch):
     from prompt_toolkit.application import Application
 
+    commands, received = [], []
+
     class Root(BaseModel):
         status: str = None
         status_other: str = None
 
+        @staticmethod
+        def run(**kwargs):
+            commands.append(kwargs)
+            return "command done"
+
     shell = App(Root, stdout=StringIO())
-    shell.is_chat = True
     with create_pipe_input() as pipe_input:
         sent = []
 
-        def rendered(app):
+        def rendered(ui):
+            if ui.is_done or shell._chat_shell._busy:
+                return
             if not sent:
                 pipe_input.send_text("/sta\t")
                 sent.append("tab")
-            elif sent == ["tab"] and app.current_buffer.complete_state:
+            elif sent[-1] == "tab" and ui.current_buffer.complete_state:
                 pipe_input.send_text("\t\rvalue\r")
-                sent.append("submit")
-            elif sent[-1] == "recall":
-                app.loop.call_soon(pipe_input.send_text, "\x1b[A\r")
-                sent.append("recalled")
+                sent.append("command")
+            elif sent[-1] == "command" and commands:
+                pipe_input.send_text("first\x1b\rsecond\r")
+                sent.append("message")
+            elif sent[-1] == "message" and received:
+                pipe_input.send_text("\x1b[A\r")
+                sent.append("recall")
+
+        def handler(message):
+            received.append(message)
+            return "reply" if len(received) == 1 else None
 
         monkeypatch.setattr(
-            "picle.picle.Application",
+            "picle.chat.Application",
             lambda **kwargs: Application(**kwargs, after_render=rendered),
         )
         with create_app_session(input=pipe_input, output=DummyOutput()):
-            # Tab selects a completion; Enter accepts it, then text remains editable.
-            assert shell._read_interactive_input("", chat=True) == "/status value"
-            pipe_input.send_text("first\x1b\rsecond\r")
-            assert shell._read_interactive_input("", chat=True) == "first\nsecond"
-            sent.append("recall")
-            assert shell._read_interactive_input("", chat=True) == "first\nsecond"
+            shell._chat_shell.run(handler, {}, SimpleNamespace())
+    assert commands == [{"status": "value"}]
+    assert received == ["first\nsecond", "first\nsecond"]
 
 
 @pytest.mark.parametrize(
@@ -336,7 +362,11 @@ def test_chat_newline_keys_from_root_config(setting, keys):
     with create_pipe_input() as pipe_input:
         with create_app_session(input=pipe_input, output=DummyOutput()):
             pipe_input.send_text(keys)
-            assert shell._read_interactive_input("", chat=True) == "first\nsecond"
+            received = []
+            shell._chat_shell.run(
+                lambda message: received.append(message), {}, SimpleNamespace()
+            )
+            assert received == ["first\nsecond"]
 
 
 @pytest.mark.parametrize("input_height", [5, 8])
@@ -356,32 +386,40 @@ def test_chat_editor_viewport_scrolls_and_shrinks(monkeypatch, input_height):
 
         def rendered(app):
             window = app.layout.current_window
-            if app.is_done:
+            if app.is_done or shell._chat_shell._busy:
                 return
-            viewports.append((window.render_info.window_height, window.vertical_scroll))
-            assert len(app.layout.container.content.children) == 3
-            if len(viewports) == 1:
+            if not viewports:
+                viewports.append(
+                    (window.render_info.window_height, window.vertical_scroll)
+                )
                 pipe_input.send_text("\x1b[200~" + "line\n" * 20 + "end\x1b[201~")
-            elif len(viewports) == 2:
+            elif len(viewports) == 1 and window.vertical_scroll > 0:
+                viewports.append(
+                    (window.render_info.window_height, window.vertical_scroll)
+                )
                 monkeypatch.setattr(
                     output, "get_size", lambda: Size(rows=7, columns=40)
                 )
                 app.renderer.reset()
                 app.invalidate()
-            else:
+            elif len(viewports) == 2:
+                viewports.append(
+                    (window.render_info.window_height, window.vertical_scroll)
+                )
                 pipe_input.send_text("\r")
 
         def application(**kwargs):
             return Application(**kwargs, after_render=rendered)
 
-        monkeypatch.setattr("picle.picle.Application", application)
+        monkeypatch.setattr("picle.chat.Application", application)
         with create_app_session(input=pipe_input, output=output):
-            assert (
-                shell._read_interactive_input(
-                    "", chat=True, chat_input_height=input_height
-                )
-                == "line\n" * 20 + "end"
+            received = []
+            shell._chat_shell.run(
+                lambda message: received.append(message),
+                {},
+                SimpleNamespace(chat_input_height=input_height),
             )
+            assert received == ["line\n" * 20 + "end"]
     assert viewports[0] == (input_height, 0)
     assert viewports[1][0] == input_height and viewports[1][1] > 0
     assert viewports[-1][0] == 4 and viewports[-1][1] > 0

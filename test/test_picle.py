@@ -1653,6 +1653,7 @@ def test_tabulate_table_with_list_of_lists():
 # ---- Chat interface tests ----
 
 
+@pytest.mark.usefixtures("scripted_chat")
 def test_chat_shell_passes_additional_argument_to_run():
     """Test chat shell passes command arguments to run() calls."""
     shell.onecmd("top")
@@ -1671,6 +1672,7 @@ def test_chat_shell_passes_additional_argument_to_run():
     assert outputs.count("'session_id': 'session-123'") == 2
 
 
+@pytest.mark.usefixtures("scripted_chat")
 def test_chat_shell_keeps_additional_argument_after_slash_command():
     """Test chat shell keeps command arguments after executing a /command."""
     shell.onecmd("top")

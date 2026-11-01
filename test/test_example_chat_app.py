@@ -1,9 +1,12 @@
 import sys
 import unittest.mock
+import pytest
 
 from picle import App
 
 from .example_chat_app import MockChatState, Root
+
+pytestmark = pytest.mark.usefixtures("scripted_chat")
 
 
 def _collect_output(mock_stdout) -> str:
@@ -86,7 +89,7 @@ def test_chat_reset_clears_state_and_restarts_turn_counter():
     assert MockChatState.history == ["second"]
 
 
-def test_chat_streaming_response_writes_chunks_with_prefix():
+def test_chat_complete_response_writes_with_prefix():
     MockChatState.reset()
     shell, mock_stdout = _new_shell()
 
@@ -94,13 +97,11 @@ def test_chat_streaming_response_writes_chunks_with_prefix():
         shell,
         "_read_interactive_input",
         side_effect=["stream token stream", EOFError],
-    ), unittest.mock.patch("test.example_chat_app.time.sleep") as mock_sleep:
+    ):
         shell.onecmd("chat session_id sess-005 user tom")
 
     output = _collect_output(mock_stdout)
     assert "AI> [model=mock-1] [turn=1] [session=sess-005] tom: TOKEN STREAM" in output
-    assert mock_sleep.call_count == len("token stream")
-    mock_sleep.assert_called_with(0.3)
 
 
 def test_chat_exit_command_leaves_chat_mode():

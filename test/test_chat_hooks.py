@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from picle import App
 
+pytestmark = pytest.mark.usefixtures("scripted_chat")
+
 
 def make_chat(monkeypatch, *, enter=True, exit=True, mounted=True):
     events = []

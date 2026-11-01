@@ -95,6 +95,16 @@ editor controls and a Shift+Enter terminal mapping example.
 
 ::: picle.App
 
+## Chat session
+
+The active handler receives a `ChatSession` when it explicitly declares a
+named `chat` parameter. Lifecycle hooks do not receive the session object. `**kwargs` alone
+does not enable injection. Progress is plain text; response outputters continue
+to render the returned final answer. See [Chat Interface](features/chat_interface.md)
+for status, approval controls and busy-input behavior.
+
+::: picle.ChatSession
+
 ## PICLE Build In Models
 
 ::: picle.models.Filters

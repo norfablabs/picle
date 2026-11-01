@@ -79,7 +79,10 @@ history file. Preserve the existing shell history file format.
 
 ## Implementation outline
 
-1. Add a chat-specific branch in `App._read_interactive_input()` using a
+1. Keep the editor and chat loop in `ChatShell` in `picle/chat.py`.
+   `App._run_chat_shell()` delegates to the single persistent `ChatShell.run()`
+   application. Normal shell input remains in `App._read_interactive_input()`.
+   Use a
    prompt-toolkit `TextArea`, top and bottom separator lines,
    scrollbar in a non-full-screen layout. Reuse existing
    completion adapter and a separate in-memory chat history. Keep the normal shell's persistent
@@ -88,9 +91,9 @@ history file. Preserve the existing shell history file format.
    completion handling. Ensure the editor releases terminal control on normal
    completion and exceptions. Avoid using `self.is_chat` alone to select the
    reader, since slash commands can also request ordinary field input.
-3. Update `App._run_chat_shell()` to preserve multiline message whitespace
+3. Use `ChatShell.run()` to preserve multiline message whitespace
    and apply the single-line slash-command rule. Keep lifecycle hooks,
-   streaming, Ctrl+C and EOF behavior unchanged.
+   response outputters and existing idle Ctrl+C and EOF behavior.
 4. Use a separate `InMemoryHistory` for chat input, retaining it across chat
    sessions in the same app instance. Keep ordinary shell input and
    `load-terminal` collection unchanged.
@@ -134,3 +137,34 @@ lines. Reduce it to fit the available terminal height, with a minimum of one row
 - [Prompt-toolkit key bindings and terminal constraints](https://python-prompt-toolkit.readthedocs.io/en/stable/pages/advanced_topics/key_bindings.html)
 - [Prompt-toolkit application layouts and widgets](https://python-prompt-toolkit.readthedocs.io/en/stable/pages/full_screen_apps.html)
 - [Rich prompts](https://rich.readthedocs.io/en/latest/prompt.html)
+
+## Persistent layout extension
+
+Keep one prompt-toolkit application alive during each chat session. Permanent
+output goes to terminal scrollback; status, approval and input sections share
+one renderer below it. Handlers run in a worker thread. Input remains editable
+while busy, but submission and Ctrl+C/Ctrl+D termination are disabled until the
+operation finishes. No queued or overlapping operations are allowed.
+
+Expose `ChatSession.write(text)`, `set_status(text="", spinner=False)`, and
+`approve(prompt) -> bool`. Inject the session only into the active handler
+when it explicitly names `chat`; hooks receive command arguments only. Handler
+updates are scheduled onto an ordered async UI queue. Additional callback
+threads and concurrent approval requests are outside the supported scope.
+The status row uses prompt-toolkit refreshes for animation. Approvals focus an
+Allow/Deny section and block the worker, not the UI. Teardown denies pending
+approvals and clears the chat flag. Hooks do not write session progress, so
+there is no post-UI output flush. Do not snapshot or restore shell state:
+`/exit` uses normal shell exit handling; EOF, errors and handler termination
+may leave the slash-command model mounted. Nested chats and shell navigation
+through slash commands are unsupported; custom slash commands remain available.
+
+Streaming responses are removed. Handlers return complete answers, rendered
+once using the existing outputter path. Arbitrary print/log capture, Rich Live,
+cooperative cancellation and transcript navigation remain outside this scope.
+
+`ChatSession.set_footer(text="")` replaces an optional plain-text row below
+the bottom separator. It persists between messages and handler errors until
+replaced or cleared, and resets when the session ends. Long content is clipped
+without wrapping; a visible footer reduces the editor's available height by
+one row. It uses the existing event queue and requires no additional setting.

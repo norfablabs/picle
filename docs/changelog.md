@@ -1,12 +1,18 @@
 # 0.13.1 (draft)
 
+## CHANGES
+
+1. Chat now keeps one input layout alive during operations. Handlers run off the UI thread; input stays editable, while submission and Ctrl+C/Ctrl+D termination are disabled until the operation finishes.
+2. Removed chat streaming responses. Handlers return complete answers and can report intermediate progress through `ChatSession.write()`.
+3. Removed `/end` from chat commands, completion and help. Use `/exit` to leave chat; the normal shell's `end` command remains available.
+
 ## BUGS
 
 1. Validate pipe arguments against the pipe model so invalid types and field constraints prevent handler execution.
 2. Reject invalid enum values instead of silently discarding them and executing with defaults.
 3. Stop collecting compact JSON once its closing delimiter is present, preserving following arguments and pipe commands.
 4. Prevent `top` and subshell `exit` from raising an error when `PicleConfig` does not define `prompt`.
-5. Honor termination results from chat slash commands, including `/end`, and run the chat exit hook once.
+5. Honor termination results from custom chat slash commands and run the chat exit hook once.
 
 ## ENHANCEMENTS
 
@@ -14,6 +20,9 @@
 2. Chat input now uses a fixed-height multiline editor with top and bottom separator lines and a scrollbar. Enter submits; Alt+Enter inserts a newline by default. The root model's `PicleConfig.chat_newline_keys` setting customizes the app-wide newline sequence. Multiline messages preserve whitespace and remain in memory-only history; only single-line slash input executes as a command.
 3. Added chat-model `PicleConfig.chat_input_height` to configure visible input rows (default five). Removed the keyboard-controls hint row to save terminal space.
 4. Separated in-memory chat history from persistent shell command history, so leaving chat restores shell-only Up/Down recall.
+5. Moved the chat editor and execution loop into `picle/chat.py`, preserving existing App entry points, hooks, settings, history and output behavior.
+6. Added named `chat` injection for the active handler, with plain-text progress, animated status, and sequential Allow/Deny approvals. Output remains in terminal scrollback above the status, approval and input sections. Hooks receive command arguments only. Simplified chat to one persistent input path without callback-thread support or shell-state restoration; `/exit` retains normal shell exit handling.
+7. Added `chat.set_footer(text="")` for a persistent single-line footer below the input. Empty text hides it; the footer resets when the chat session ends.
 
 ---
 

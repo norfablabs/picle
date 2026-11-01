@@ -15,7 +15,6 @@ Inside chat mode:
 """
 
 import time
-
 from typing import Any
 
 from pydantic import BaseModel, Field, StrictStr
@@ -97,10 +96,20 @@ class MockChatAgent(BaseModel):
     user: StrictStr = Field("guest", description="Display name for responses")
 
     @staticmethod
-    def run(message: str, **kwargs):
+    def run(message: str, chat=None, **kwargs):
         normalized = message.strip()
         if normalized.lower() == "bye":
             return None
+        if normalized.lower() in {"work", "fail"}:
+            chat.set_status("Working...", spinner=True)
+            chat.write("Starting operation")
+            time.sleep(1)
+            if normalized.lower() == "fail":
+                raise ValueError("Example operation failed")
+            chat.write("Operation completed")
+            return "Done"
+        if normalized.lower() == "approve":
+            return "Allowed" if chat.approve("Allow the example action?") else "Denied"
 
         MockChatState.turn += 1
         MockChatState.history.append(normalized)
@@ -111,19 +120,11 @@ class MockChatAgent(BaseModel):
         if normalized.lower().startswith("stream "):
             payload = normalized[7:]
 
-            def stream():
-                prefix = (
-                    f"[model={MockChatState.model_name}] "
-                    f"[turn={MockChatState.turn}] "
-                    f"[session={session_id}] "
-                    f"{user}: "
-                )
-                yield prefix
-                for letter in payload.upper():
-                    time.sleep(0.3)
-                    yield letter
-
-            return stream()
+            return (
+                f"[model={MockChatState.model_name}] "
+                f"[turn={MockChatState.turn}] "
+                f"[session={session_id}] {user}: {payload.upper()}"
+            )
 
         return (
             f"[model={MockChatState.model_name}] "

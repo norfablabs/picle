@@ -1,42 +1,115 @@
 # Chat Interface
 
-The chat interface provides an interactive loop where a user sends messages
-and receives responses, similar to chatting with an AI agent or LLM.
+Chat mode lets users exchange messages with an agent while running commands
+without leaving the conversation. The message editor stays visible while a
+response is being prepared. Progress, status and approval requests appear
+above it.
 
-Enable it by setting `chat_shell = True` in a model's `PicleConfig` inner
-class. When the user invokes that model without arguments PICLE enters the
-chat loop and repeatedly prompts for input, passing each complete message as the first
-positional argument to the model's `run` method.
+## Basic example
 
-Every chat session uses a multiline editor with top and bottom separator lines,
-a viewport of five rows by default and a vertical scrollbar. Set
-`chat_input_height` on the chat model's `PicleConfig` to change the number of
-visible text rows. It shrinks to fit shorter terminals and uses at least one
-row. Arrow keys move
-within the message, and long lines wrap. No additional configuration is needed.
+Set `chat_shell = True` on the chat model and define `run()` to handle each
+submitted message:
+
+```python
+from pydantic import BaseModel, Field
+from picle import App
+
+
+class AgentModel(BaseModel):
+    @staticmethod
+    def run(message, **kwargs):
+        return f"I received: {message}"
+
+    class PicleConfig:
+        chat_shell = True
+        chat_prompt = "You> "
+        chat_response_prefix = "AI> "
+
+
+class Root(BaseModel):
+    agent: AgentModel = Field(None, description="Chat with the agent")
+
+
+App(Root).start()
+```
+
+Enter `agent` at the shell prompt to start chatting. Type `/exit` on a single
+line to return to the parent shell.
+
+For a working example, run this command from the repository root:
+
+```shell
+poetry run python -m test.example_chat_app
+```
+
+Then enter `chat session_id demo user alice`. Try `work` for progress updates,
+`fail` for an example error, or `approve` for an approval request.
+
+## Writing messages
 
 | Key | Action |
 |-----|--------|
-| Enter | Submit the message; if a completion is active, accept it first. |
-| Alt+Enter | Insert a newline (default). |
-| Tab | Complete a slash command using the existing command completion. |
+| Enter | Send the message. If a completion is selected, accept it first. |
+| Alt+Enter | Insert a newline by default. |
+| Tab | Complete a slash command. |
+| Arrow keys | Move within the message; Up/Down also recall earlier chat input. |
 
-The app-level `chat_newline_keys` setting defaults to `"alt+enter"`, translated
-internally to the terminal's Escape/Enter sequence. It also accepts a
-prompt-toolkit key name or a tuple of key names. Set it in the root model's
-`PicleConfig` to change the newline binding for all chat sessions:
+Paste or type several lines, edit them, then press Enter to send the complete
+message. Indentation and surrounding whitespace are preserved. Pressing Enter
+on empty or whitespace-only input does nothing.
+
+The editor shows five text rows by default, wraps long lines and scrolls as
+you move through longer messages. Set `chat_input_height` to change its height;
+it shrinks to fit smaller terminals.
+
+Use the terminal's scroll controls to review earlier messages and responses.
+Chat input history is separate from shell command history and is available
+across chat sessions until the app closes. Chat input is not saved to disk.
+
+While a response is being prepared, you can compose the next message, but
+must wait for the current operation to finish before sending it. **Ctrl+C
+and Ctrl+D do not cancel a running operation or close a busy chat.**
+
+## PicleConfig options
+
+Set these options on the chat model, except `chat_newline_keys`, which belongs
+on the root model and applies to all chat sessions.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `chat_shell` | `False` | Enable chat mode for this model. |
+| `chat_prompt` | `"> "` | Prefix shown with submitted messages. |
+| `chat_input_height` | `5` | Visible text rows, excluding separator lines. Uses at least one row and shrinks to fit the terminal. |
+| `chat_newline_keys` | `"alt+enter"` | Newline shortcut for all chats. Accepts `"alt+enter"`, a key name such as `"c-j"` for Ctrl+J, or a tuple of key names for a sequence. |
+| `chat_response_style` | `None` | Response style such as `"green"` or `"bold cyan"`. Requires Rich and `use_rich = True`. |
+| `chat_response_prefix` | `""` | Prefix shown before responses, such as `"AI> "`. |
+| `chat_commands_model` | `None` | Model defining custom slash commands. |
+
+For example, to show eight input rows and green responses:
+
+```python
+class PicleConfig:
+    chat_shell = True
+    chat_input_height = 8
+    chat_response_prefix = "AI> "
+    chat_response_style = "green"
+```
+
+## Changing the newline shortcut
+
+Configure `chat_newline_keys` on the root model:
 
 ```python
 class Root(BaseModel):
     agent: AgentModel = None
 
     class PicleConfig:
-        chat_newline_keys = "c-j"  # default: "alt+enter"
+        chat_newline_keys = "c-j"  # Ctrl+J; default is "alt+enter"
 ```
 
-With `"c-j"`, Ctrl+J inserts a newline. To use Shift+Enter instead, map it
-in your terminal to send the same line feed. In VS Code, add this entry to
-your user `keybindings.json`:
+The new shortcut replaces Alt+Enter. To use Shift+Enter, configure `"c-j"`
+as above and map Shift+Enter to a line feed in your terminal. In VS Code,
+add this entry to your user `keybindings.json`:
 
 ```json
 {
@@ -47,67 +120,88 @@ your user `keybindings.json`:
 }
 ```
 
-The configured binding replaces the default Alt+Enter newline binding.
+## Slash commands
 
-Pasted multiline text stays in the editor until submitted. Messages retain
-their indentation and leading or trailing whitespace; whitespace-only input
-is ignored. Chat input has its own in-memory history, shared across chat
-sessions in the same app instance. It is never written to the shell history
-file. Up/Down in chat recalls chat input; after leaving chat, Up/Down recalls
-only shell commands. Shell command history continues to be saved as before.
-
-The complete submitted message and response appear in terminal scrollback.
-Use the terminal's scroll controls to review earlier conversation output;
-scrolling inside the editor navigates the message being composed.
-
-Single-line messages starting with `/` are dispatched to a dedicated command model
-(`chat_commands_model`) instead of the chat function. A single-line `/exit` exits
-the loop and returns to the normal shell prompt.
-
-## Basic example
+A single-line message beginning with `/` runs a command instead of sending a
+message to the agent. Define custom commands with `chat_commands_model`:
 
 ```python
-from pydantic import BaseModel, Field
-from picle import App
+from typing import Any
+
+
+class ChatCommands(BaseModel):
+    usage: Any = Field(None, json_schema_extra={"function": "show_usage"})
+
+    @staticmethod
+    def show_usage():
+        return "1234 tokens used"
 
 
 class AgentModel(BaseModel):
-    model: str = Field(None, description="LLM model name")
-
     @staticmethod
     def run(message, **kwargs):
-        # Replace with your LLM / agent call
-        return f"Assistant: I received '{message}'"
+        return f"Echo: {message}"
 
     class PicleConfig:
         chat_shell = True
-        chat_prompt = "You> "
-        chat_commands_model = None   # set to a model for /commands support
-
-
-class Root(BaseModel):
-    agent: AgentModel = Field(None, description="AI agent chat")
+        chat_commands_model = ChatCommands
 ```
 
-```
-picle# agent
-You> Hello!
-Assistant: I received 'Hello!'
-You> How are you?
-Assistant: I received 'How are you?'
-You> <Ctrl+D>
-picle#
+In this example, `/usage` displays the custom usage report. It is not a
+built-in command. Type `/exit` to leave chat. Commands that ask for additional
+input may temporarily
+hide the message editor until that input is complete.
+
+A message containing any line break is always sent to the agent, even if it
+starts with `/` or has only a trailing newline. Nested chats and shell
+navigation from slash commands are not supported.
+
+## Progress, status and approvals
+
+Add a named `chat` parameter to `run()` to show progress or ask for approval:
+
+```python
+class AgentModel(BaseModel):
+    @staticmethod
+    def run(message, chat, **kwargs):
+        chat.set_footer("Model: local | Session: demo")
+        chat.set_status("Working...", spinner=True)
+        chat.write("Checking the request")
+        if not chat.approve("Allow this action?"):
+            return "Action denied"
+        chat.write("Action allowed")
+        return f"Completed: {message}"
+
+    class PicleConfig:
+        chat_shell = True
 ```
 
-The loop continues until the user presses **Ctrl+D** (EOF) or types `/exit`.
+| Method | Use |
+|--------|-----|
+| `chat.write(text)` | Add a plain-text progress message above the editor. Embedded newlines are preserved; a final newline is optional. |
+| `chat.set_status(text="", spinner=False)` | Replace the temporary status line. Set `spinner=True` to show activity, or call with no text to clear it. Status also clears when the operation finishes. |
+| `chat.set_footer(text="")` | Replace the single-line footer below the editor. It stays between messages, including after an error. Call with no text to hide it. Long text is clipped to the available width. |
+| `chat.approve(prompt)` | Ask the user to press **Y** to Allow or **N** to Deny. Returns `True` or `False`. |
 
-For comprehensive chat app example refer to [sample chat app in PICLE test folder](https://github.com/dmulyalin/picle/blob/master/test/example_chat_app.py)
+An approval waits for the user's choice before continuing. While it is
+pending, keyboard input answers the approval; afterward, the message editor
+is active again. Ask for one approval at a time. If chat closes unexpectedly,
+a pending approval is denied.
+
+Call these methods directly from `run()`, not from hooks or background
+callbacks. Declare `chat` explicitly: `**kwargs` alone does not receive it.
+Do not use `chat` as the name of a user-supplied command argument.
+
+Return the final answer normally; do not also send it with `chat.write()`.
+Response prefixes, styles and outputters continue to apply. Return a complete
+answer rather than a generator or iterator. Use `chat.write()` for progress
+instead of `print()`, terminal logs or a separate live display.
 
 ## Session hooks
 
-Define optional synchronous `chat_on_enter(**kwargs)` and
-`chat_on_exit(**kwargs)` methods on the chat command model, outside
-`PicleConfig`, to manage application-owned context:
+Use `chat_on_enter()` to initialize context before the first message and
+`chat_on_exit()` to clean it up when chat ends. Define them on the chat model,
+not inside `PicleConfig`:
 
 ```python
 context = {}
@@ -132,148 +226,25 @@ class AgentModel(BaseModel):
         chat_shell = True
 ```
 
-Entry runs once after validation and before the first input, so slash
-commands and completion sources can use the initialized context. Exit runs
-once when the chat loop ends, including on `/exit`, EOF,
-Ctrl+C, handler termination, or an escaping error. Errors handled inside the
-message loop leave the session open. Reopening chat runs the hooks again.
+Each hook runs once per session. Either may be omitted. Both receive command
+arguments and defaults, with explicit arguments taking precedence. They do
+not receive the `chat` object, and their return values are ignored.
 
-Both hooks receive the message handler's resolved keyword arguments, without
-its positional message: shell defaults, then command defaults, then explicit
-arguments. Existing argument names and alias handling apply. Return values
-are ignored. Either hook can be omitted; normal class inheritance works.
-Hooks are looked up on the chat command model, with no fallback to command
-parents or the mounted slash-command model.
+If command validation fails, neither hook runs. If entry fails, chat does
+not open and exit is not called; clean up any partially initialized context
+in the entry hook. Exit errors are reported and can prevent a requested app
+termination from taking effect.
 
-Validation failure runs neither hook. If entry raises, PICLE reports the
-error without reading input or calling exit; the application is responsible
-for cleaning up partial initialization. Exit errors are reported through the
-normal command exception handler and override any pending chat return value.
+## Ending a session
 
-## PicleConfig options
+- `/exit` leaves chat and returns to the parent shell.
+- Ctrl+D on an empty editor ends chat while idle.
+- Ctrl+C while idle ends chat and terminates the app.
+- Returning `None` from `run()` ends chat.
+- Returning `True` from `run()` ends chat and terminates the app.
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `chat_shell` | `False` | Set to `True` to enable chat loop when the model is invoked. |
-| `chat_prompt` | `"> "` | Prompt string shown before each user input. |
-| `chat_input_height` | `5` | Visible input text rows, excluding separator lines; constrained to the terminal height with a minimum of one row. |
-| `chat_newline_keys` | `"alt+enter"` | App-wide newline binding, configured on the root model's `PicleConfig`. Accepts `"alt+enter"`, a prompt-toolkit key name such as `"c-j"`, or a tuple of key names. |
-| `chat_response_style` | `None` | Rich markup style applied to responses (e.g. `"green"`, `"bold cyan"`). Only used when Rich is installed. |
-| `chat_response_prefix` | `""` | Text prepended to each response (e.g. `"AI> "`). |
-| `chat_commands_model` | `None` | Pydantic model class whose fields are available as `/commands` inside the chat loop. |
+After Ctrl+D or a handler ending chat, a configured slash-command shell may
+remain active. Use `exit` to return to its parent shell.
 
-## Slash commands
-
-Single-line messages that start with `/` are dispatched to `chat_commands_model` instead
-of the chat function. This lets users run sub-commands without leaving
-the chat. A buffer containing any line break is sent to the chat function as
-one message, even if it starts with `/` or has only a trailing newline:
-
-```
-You> tell me a joke
-Assistant: Why did the programmer quit? Because he didn't get arrays.
-You> /show usage
-1234; 1234; 1234
-You> /exit
-picle#
-```
-
-A single-line `/exit` exits the chat loop. `chat_commands_model` must be provided
-for any other slash commands to work.
-
-```python
-class ShowCommands(BaseModel):
-    usage: Any = Field(None, json_schema_extra={"function": "show_usage"})
-
-    @staticmethod
-    def show_usage():
-        return "1234; 1234; 1234"
-
-
-class AgentModel(BaseModel):
-    model: str = Field(None, description="LLM model name")
-
-    @staticmethod
-    def run(message, **kwargs):
-        return f"Echo: {message}"
-
-    class PicleConfig:
-        chat_shell = True
-        chat_commands_model = ShowCommands
-```
-
-## Rich styled responses
-
-When Rich is installed and `use_rich` is enabled, you can style agent
-responses to visually distinguish them from user input.
-
-```python
-class AgentModel(BaseModel):
-    @staticmethod
-    def run(message, **kwargs):
-        return f"I received: {message}"
-
-    class PicleConfig:
-        chat_shell = True
-        chat_prompt = "You> "
-        chat_response_style = "green"
-        chat_response_prefix = "AI> "
-```
-
-```
-You> Hello
-AI> I received: Hello       <-- printed in green when Rich is available
-You>
-```
-
-Any Rich console markup style is supported: `"bold cyan"`, `"italic yellow"`,
-`"dim"`, etc.
-
-## Streaming responses
-
-If `run` returns a generator (or any iterator), the chat loop writes each
-chunk to stdout as it arrives instead of waiting for the full response.
-
-```python
-class StreamingAgent(BaseModel):
-    @staticmethod
-    def run(message, **kwargs):
-        def stream():
-            for token in message.split():
-                yield token + " "
-        return stream()
-
-    class PicleConfig:
-        chat_shell = True
-```
-
-This is useful for LLM token streaming and other incremental output flows.
-Pressing **Ctrl+C** while streaming cancels the current response and returns
-to the chat prompt.
-
-## Exiting the chat from the run function
-
-The chat loop normally continues until the user presses **Ctrl+D** or types
-`/exit`. The `run` method can also control loop exit:
-
-- **`return None`** — exits the chat loop and returns to the shell prompt.
-- **`return True`** — exits the chat loop **and** terminates the current shell.
-
-**Ctrl+C** behavior depends on context:
-
-- During streaming output: cancels the current response and returns to the chat prompt.
-- At the chat prompt (waiting for input): exits the chat loop and terminates the current shell.
-
-```python
-class AgentModel(BaseModel):
-    @staticmethod
-    def run(message, **kwargs):
-        if message.lower() == "bye":
-            return None      # exit chat, return to shell
-        if message.lower() == "shutdown":
-            return True      # exit chat and terminate shell
-        return f"Echo: {message}"
-
-    class PicleConfig:
-        chat_shell = True
-```
+Handler errors are displayed so the user can try another message. The exit
+hook runs when the session ends, including after an error that closes chat.
