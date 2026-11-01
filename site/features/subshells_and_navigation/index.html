@@ -296,6 +296,26 @@
   
 
       
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../development/adr-001-multiline-chat-input/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -1090,6 +1110,121 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/adr-001-multiline-chat-input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-001: Multiline Chat Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/adr-002-ssh-server-support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002: SSH Server Support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1260,7 +1395,7 @@ devices#
 <li><code>end</code>: terminate the application immediately.</li>
 <li><code>pwd</code>: print the current shell path.</li>
 <li><code>cls</code>: clear the terminal screen.</li>
-<li><code>history</code>: print command history when readline support is available.</li>
+<li><code>history</code>: print command history.</li>
 </ul>
 <div class="highlight"><pre><span></span><code>devices[cli]#pwd
 Root-&gt;DeviceTools-&gt;DeviceCli
@@ -1273,7 +1408,8 @@ picle#
 </code></pre></div>
 <p>Notes:</p>
 <ul>
-<li><code>history</code> uses <code>readline</code> on Unix-like systems and <code>pyreadline3</code> on Windows when installed.</li>
+<li>Interactive history uses the same persistent <code>prompt_toolkit</code> session on Linux, macOS, and Windows.</li>
+<li><code>PicleConfig.history_file</code> selects the history file, and <code>history_length</code> limits the number of entries written when the shell exits.</li>
 <li>History output skips meta commands such as <code>help</code>, <code>history</code>, <code>exit</code>, and commands ending in <code>?</code>.</li>
 </ul>
 
