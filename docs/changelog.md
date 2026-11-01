@@ -3,6 +3,9 @@
 ## ENHANCEMENTS
 
 1. Added optional synchronous `chat_on_enter(**kwargs)` and `chat_on_exit(**kwargs)` methods on chat command models to initialize and release application context once per session. Hooks receive the same resolved keyword arguments as the message handler.
+2. Chat input now uses a fixed-height multiline editor with top and bottom separator lines and a scrollbar. Enter submits; Alt+Enter inserts a newline by default. The root model's `PicleConfig.chat_newline_keys` setting customizes the app-wide newline sequence. Multiline messages preserve whitespace and remain in memory-only history; only single-line slash input executes as a command.
+3. Added chat-model `PicleConfig.chat_input_height` to configure visible input rows (default five). Removed the keyboard-controls hint row to save terminal space.
+4. Separated in-memory chat history from persistent shell command history, so leaving chat restores shell-only Up/Down recall.
 
 ---
 

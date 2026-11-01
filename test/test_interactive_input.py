@@ -4,6 +4,7 @@ from io import StringIO
 
 import pytest
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import create_app_session
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 from prompt_toolkit.input import create_pipe_input
@@ -205,3 +206,182 @@ def test_prompt_session_maps_ctrl_d_to_eof():
         assert shell._read_interactive_input("") == "line 1"
         with pytest.raises(EOFError):
             shell._read_interactive_input("")
+
+
+@pytest.mark.parametrize(
+    "keys,expected",
+    [
+        ("first\x1b\rsecond\r", "first\nsecond"),
+        ("first\x1b\rsecond\x1b[A\x1b[Hedited \r", "edited first\nsecond"),
+        ("\x1b[200~  first\n/show status\n\x1b[201~\r", "  first\n/show status\n"),
+        ("literal?\r", "literal?"),
+        ("\r\rhello\r", "hello"),
+        ("  \rhello\r", "  hello"),
+        ("\x1b[200~" + "line\n" * 20 + "end\x1b[201~\r", "line\n" * 20 + "end"),
+    ],
+)
+def test_chat_editor_edits_and_submits_one_buffer(keys, expected):
+    class Root(BaseModel):
+        pass
+
+    shell = App(Root, stdout=StringIO())
+    shell.use_rich = False
+    shell._history = _PicleHistory(None, 100)
+    with create_pipe_input() as pipe_input:
+        with create_app_session(input=pipe_input, output=DummyOutput()):
+            pipe_input.send_text(keys + "normal\r")
+            assert shell._read_interactive_input("You> ", chat=True) == expected
+            assert shell._read_interactive_input("") == "normal"
+    assert expected in shell._chat_history.get_strings()
+    assert expected not in shell._history.get_strings()
+    assert expected in shell.stdout.getvalue()
+
+
+@pytest.mark.parametrize("key,error", [("\x03", KeyboardInterrupt), ("\x04", EOFError)])
+def test_chat_editor_interrupts(key, error):
+    class Root(BaseModel):
+        pass
+
+    shell = App(Root)
+    with create_pipe_input() as pipe_input:
+        with create_app_session(input=pipe_input, output=DummyOutput()):
+            pipe_input.send_text(key)
+            with pytest.raises(error):
+                shell._read_interactive_input("", chat=True)
+
+
+def test_multiline_history_is_kept_only_in_memory(tmp_path):
+    path = tmp_path / "history.txt"
+    history = _PicleHistory(str(path), length=2)
+    for entry in ["first", "second", "multi\nline", "carriage\rreturn"]:
+        history.append_string(entry)
+    history.save()
+    assert history.get_strings() == [
+        "first",
+        "second",
+        "multi\nline",
+        "carriage\rreturn",
+    ]
+    assert _PicleHistory(str(path), length=2).get_strings() == ["first", "second"]
+
+
+def test_chat_history_is_separate_from_persisted_shell_history(tmp_path):
+    class Root(BaseModel):
+        class PicleConfig:
+            history_file = str(tmp_path / "history.txt")
+
+    shell = App(Root, stdout=StringIO())
+    shell._history.append_string("show status")
+    with create_pipe_input() as pipe_input:
+        with create_app_session(input=pipe_input, output=DummyOutput()):
+            pipe_input.send_text("hello chat\r")
+            assert shell._read_interactive_input("", chat=True) == "hello chat"
+    shell.postloop()
+    assert shell._chat_history.get_strings() == ["hello chat"]
+    assert shell._history.get_strings() == ["show status"]
+    assert (tmp_path / "history.txt").read_text() == "show status\n"
+
+
+def test_chat_editor_completion_and_multiline_history(monkeypatch):
+    from prompt_toolkit.application import Application
+
+    class Root(BaseModel):
+        status: str = None
+        status_other: str = None
+
+    shell = App(Root, stdout=StringIO())
+    shell.is_chat = True
+    with create_pipe_input() as pipe_input:
+        sent = []
+
+        def rendered(app):
+            if not sent:
+                pipe_input.send_text("/sta\t")
+                sent.append("tab")
+            elif sent == ["tab"] and app.current_buffer.complete_state:
+                pipe_input.send_text("\t\rvalue\r")
+                sent.append("submit")
+            elif sent[-1] == "recall":
+                app.loop.call_soon(pipe_input.send_text, "\x1b[A\r")
+                sent.append("recalled")
+
+        monkeypatch.setattr(
+            "picle.picle.Application",
+            lambda **kwargs: Application(**kwargs, after_render=rendered),
+        )
+        with create_app_session(input=pipe_input, output=DummyOutput()):
+            # Tab selects a completion; Enter accepts it, then text remains editable.
+            assert shell._read_interactive_input("", chat=True) == "/status value"
+            pipe_input.send_text("first\x1b\rsecond\r")
+            assert shell._read_interactive_input("", chat=True) == "first\nsecond"
+            sent.append("recall")
+            assert shell._read_interactive_input("", chat=True) == "first\nsecond"
+
+
+@pytest.mark.parametrize(
+    "setting,keys",
+    [
+        ("alt+enter", "first\x1b\rsecond\r"),
+        ("c-j", "first\nsecond\r"),
+        (("c-j",), "first\nsecond\r"),
+    ],
+)
+def test_chat_newline_keys_from_root_config(setting, keys):
+    class Root(BaseModel):
+        class PicleConfig:
+            chat_newline_keys = setting
+
+    shell = App(Root, stdout=StringIO())
+    assert shell.chat_newline_keys == setting
+    with create_pipe_input() as pipe_input:
+        with create_app_session(input=pipe_input, output=DummyOutput()):
+            pipe_input.send_text(keys)
+            assert shell._read_interactive_input("", chat=True) == "first\nsecond"
+
+
+@pytest.mark.parametrize("input_height", [5, 8])
+def test_chat_editor_viewport_scrolls_and_shrinks(monkeypatch, input_height):
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.data_structures import Size
+
+    class Root(BaseModel):
+        pass
+
+    shell = App(Root, stdout=StringIO())
+    output = DummyOutput()
+    monkeypatch.setattr(output, "get_size", lambda: Size(rows=24, columns=60))
+    viewports = []
+
+    with create_pipe_input() as pipe_input:
+
+        def rendered(app):
+            window = app.layout.current_window
+            if app.is_done:
+                return
+            viewports.append((window.render_info.window_height, window.vertical_scroll))
+            assert len(app.layout.container.content.children) == 3
+            if len(viewports) == 1:
+                pipe_input.send_text("\x1b[200~" + "line\n" * 20 + "end\x1b[201~")
+            elif len(viewports) == 2:
+                monkeypatch.setattr(
+                    output, "get_size", lambda: Size(rows=7, columns=40)
+                )
+                app.renderer.reset()
+                app.invalidate()
+            else:
+                pipe_input.send_text("\r")
+
+        def application(**kwargs):
+            return Application(**kwargs, after_render=rendered)
+
+        monkeypatch.setattr("picle.picle.Application", application)
+        with create_app_session(input=pipe_input, output=output):
+            assert (
+                shell._read_interactive_input(
+                    "", chat=True, chat_input_height=input_height
+                )
+                == "line\n" * 20 + "end"
+            )
+    assert viewports[0] == (input_height, 0)
+    assert viewports[1][0] == input_height and viewports[1][1] > 0
+    assert viewports[-1][0] == 4 and viewports[-1][1] > 0

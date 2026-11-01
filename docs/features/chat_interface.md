@@ -5,11 +5,63 @@ and receives responses, similar to chatting with an AI agent or LLM.
 
 Enable it by setting `chat_shell = True` in a model's `PicleConfig` inner
 class. When the user invokes that model without arguments PICLE enters the
-chat loop and repeatedly prompts for input, passing each line as the first
+chat loop and repeatedly prompts for input, passing each complete message as the first
 positional argument to the model's `run` method.
 
-Lines starting with `/` are dispatched to a dedicated command model
-(`chat_commands_model`) instead of the chat function. `/exit` always exits
+Every chat session uses a multiline editor with top and bottom separator lines,
+a viewport of five rows by default and a vertical scrollbar. Set
+`chat_input_height` on the chat model's `PicleConfig` to change the number of
+visible text rows. It shrinks to fit shorter terminals and uses at least one
+row. Arrow keys move
+within the message, and long lines wrap. No additional configuration is needed.
+
+| Key | Action |
+|-----|--------|
+| Enter | Submit the message; if a completion is active, accept it first. |
+| Alt+Enter | Insert a newline (default). |
+| Tab | Complete a slash command using the existing command completion. |
+
+The app-level `chat_newline_keys` setting defaults to `"alt+enter"`, translated
+internally to the terminal's Escape/Enter sequence. It also accepts a
+prompt-toolkit key name or a tuple of key names. Set it in the root model's
+`PicleConfig` to change the newline binding for all chat sessions:
+
+```python
+class Root(BaseModel):
+    agent: AgentModel = None
+
+    class PicleConfig:
+        chat_newline_keys = "c-j"  # default: "alt+enter"
+```
+
+With `"c-j"`, Ctrl+J inserts a newline. To use Shift+Enter instead, map it
+in your terminal to send the same line feed. In VS Code, add this entry to
+your user `keybindings.json`:
+
+```json
+{
+    "key": "shift+enter",
+    "command": "workbench.action.terminal.sendSequence",
+    "args": {"text": "\u000a"},
+    "when": "terminalFocus"
+}
+```
+
+The configured binding replaces the default Alt+Enter newline binding.
+
+Pasted multiline text stays in the editor until submitted. Messages retain
+their indentation and leading or trailing whitespace; whitespace-only input
+is ignored. Chat input has its own in-memory history, shared across chat
+sessions in the same app instance. It is never written to the shell history
+file. Up/Down in chat recalls chat input; after leaving chat, Up/Down recalls
+only shell commands. Shell command history continues to be saved as before.
+
+The complete submitted message and response appear in terminal scrollback.
+Use the terminal's scroll controls to review earlier conversation output;
+scrolling inside the editor navigates the message being composed.
+
+Single-line messages starting with `/` are dispatched to a dedicated command model
+(`chat_commands_model`) instead of the chat function. A single-line `/exit` exits
 the loop and returns to the normal shell prompt.
 
 ## Basic example
@@ -104,15 +156,18 @@ normal command exception handler and override any pending chat return value.
 |--------|---------|-------------|
 | `chat_shell` | `False` | Set to `True` to enable chat loop when the model is invoked. |
 | `chat_prompt` | `"> "` | Prompt string shown before each user input. |
+| `chat_input_height` | `5` | Visible input text rows, excluding separator lines; constrained to the terminal height with a minimum of one row. |
+| `chat_newline_keys` | `"alt+enter"` | App-wide newline binding, configured on the root model's `PicleConfig`. Accepts `"alt+enter"`, a prompt-toolkit key name such as `"c-j"`, or a tuple of key names. |
 | `chat_response_style` | `None` | Rich markup style applied to responses (e.g. `"green"`, `"bold cyan"`). Only used when Rich is installed. |
 | `chat_response_prefix` | `""` | Text prepended to each response (e.g. `"AI> "`). |
 | `chat_commands_model` | `None` | Pydantic model class whose fields are available as `/commands` inside the chat loop. |
 
 ## Slash commands
 
-Lines that start with `/` are dispatched to `chat_commands_model` instead
+Single-line messages that start with `/` are dispatched to `chat_commands_model` instead
 of the chat function. This lets users run sub-commands without leaving
-the chat:
+the chat. A buffer containing any line break is sent to the chat function as
+one message, even if it starts with `/` or has only a trailing newline:
 
 ```
 You> tell me a joke
@@ -123,7 +178,7 @@ You> /exit
 picle#
 ```
 
-`/exit` always exits the chat loop. `chat_commands_model` must be provided
+A single-line `/exit` exits the chat loop. `chat_commands_model` must be provided
 for any other slash commands to work.
 
 ```python

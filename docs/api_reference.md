@@ -20,6 +20,8 @@ and specific built-in models may honor additional `PicleConfig` keys (for exampl
 | `use_rich` | If `True` and Rich is installed, print via Rich console |
 | `newline` | Output newline, default `\r\n` |
 | `completekey` | Enables interactive Tab completion; set to `None` to disable it, default `tab` |
+| `chat_newline_keys` | App-wide chat newline binding, read from the root model; default `"alt+enter"`. Accepts a prompt-toolkit key name or tuple of key names as alternatives. |
+| `chat_input_height` | Visible input text rows, read from the chat model; default `5`. Constrained to the terminal height with a minimum of one row. |
 | `pipe` | Enables `|` and selects the pipe model (`"self"`, import string, or model class) |
 | `processors` | List of callables applied to the first command result |
 | `outputter` | Callable used to render output when not overridden |
@@ -29,9 +31,10 @@ and specific built-in models may honor additional `PicleConfig` keys (for exampl
 | `subshell` | If `True`, navigating to this model with no args enters a subshell (prompt changes, model is pushed onto a stack) |
 | `methods_override` | Dict of `{app_method_name: model_method_name}` used to override `App` methods at runtime |
 
-Interactive input uses one persistent `prompt_toolkit.PromptSession` for line editing,
+Normal shell input uses one persistent `prompt_toolkit.PromptSession` for line editing,
 completion, cursor movement, and Up/Down history. Setting `App.use_rawinput = False`
 keeps the non-interactive `stdin.readline()` path and does not create a prompt session.
+Chat input uses a separate fixed-height multiline editor with a scrollbar.
 
 ## `json_schema_extra` Field Level Configuration
 
@@ -72,6 +75,23 @@ PICLE builds callable `**kwargs` from collected field values and calls either `r
 - `shell_command` - if callable signature includes `shell_command` adds parsed command context for the current segment: a list of model dictionaries produced by `parse_command` method. This is useful when your function needs to inspect the command path, model defaults, or other parsing details.
 
 ## PICLE App
+
+Configure the app-wide chat newline binding in the root model's `PicleConfig`:
+
+```python
+class Root(BaseModel):
+    agent: AgentModel = None
+
+    class PicleConfig:
+        chat_newline_keys = "alt+enter"  # default
+```
+
+`chat_newline_keys` accepts `"alt+enter"`, a prompt-toolkit key name such as
+`"c-j"`, or a tuple of key names. PICLE translates `"alt+enter"` internally
+to the terminal's Escape/Enter sequence. The setting applies to every chat
+session; Enter submits the message. It can also be set on an `App` instance
+before entering chat. See [Chat Interface](features/chat_interface.md) for
+editor controls and a Shift+Enter terminal mapping example.
 
 ::: picle.App
 

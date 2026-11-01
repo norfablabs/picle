@@ -1,6 +1,7 @@
 """Chat lifecycle through public command dispatch and scripted input."""
 
 import io
+from unittest.mock import Mock
 
 import pytest
 from pydantic import BaseModel, Field
@@ -227,3 +228,28 @@ def test_command_parent_hooks_are_not_used(monkeypatch):
     monkeypatch.setattr(app, "_read_interactive_input", lambda *a, **kw: "/exit")
     app.onecmd("chat")
     assert events == []
+
+
+def test_multiline_chat_preserves_message_and_routes_single_line_commands(monkeypatch):
+    app, _, events = make_chat(monkeypatch)
+    inputs = iter(
+        [" \n ", "  code\n    indented  \n", "/status\n", " /status ", "/exit"]
+    )
+    monkeypatch.setattr(app, "_read_interactive_input", lambda *a, **kw: next(inputs))
+    app.onecmd("chat")
+    assert [name for name, _ in events] == [
+        "enter",
+        "  code\n    indented  \n",
+        "/status\n",
+        "slash",
+        "exit",
+    ]
+
+
+def test_chat_input_height_from_chat_model(monkeypatch):
+    app, chat, _ = make_chat(monkeypatch)
+    monkeypatch.setattr(chat.PicleConfig, "chat_input_height", 8, raising=False)
+    read = Mock(return_value="/exit")
+    monkeypatch.setattr(app, "_read_interactive_input", read)
+    app.onecmd("chat")
+    assert read.call_args.kwargs["chat_input_height"] == 8

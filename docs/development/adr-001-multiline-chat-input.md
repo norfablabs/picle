@@ -1,6 +1,6 @@
 # ADR-001: Editable multiline chat input
 
-Status: Accepted; implementation pending.
+Status: Accepted; implemented.
 
 Date: 2026-11-01
 
@@ -22,7 +22,7 @@ independent shell history entries.
 
 ## Decision
 
-Use a fixed-height, bordered multiline editor with vertical scrolling for
+Use a fixed-height multiline editor with top and bottom separator lines and vertical scrolling for
 every chat session. Chat models continue to enable chat through the existing
 setting:
 
@@ -33,22 +33,25 @@ class PicleConfig:
 
 Do not add a `chat_multiline` setting or a separate single-line chat mode.
 Use prompt-toolkit's `TextArea` inside a small non-full-screen application
-layout. Keep the visible editor height bounded while allowing the message
+layout without side borders. Keep the visible editor height bounded while allowing the message
 to grow beyond it; scroll with the cursor and show a vertical scrollbar.
-Show a short hint describing submission and newline controls. Rich continues
-to render responses outside the active editor.
+Omit the keyboard-controls hint to save terminal space. Rich continues to
+render responses outside the active editor.
 
 | Action | Behavior |
 |--------|----------|
 | Enter | Submit the complete buffer as one message. |
-| Alt+Enter | Insert a newline. |
-| Escape, then Enter | Insert a newline as an alternative to Alt+Enter. |
+| Alt+Enter / Escape, then Enter | Insert a newline by default. |
 | Arrow keys | Move within the editable buffer, scrolling when needed. |
 | Bracketed multiline paste | Insert all pasted text without submitting it. |
 
 If a completion is active, Enter accepts it before submitting the message,
-preserving the existing completion interaction. Do not require Shift+Enter:
-terminals do not consistently distinguish it from Enter.
+preserving the existing completion interaction. Configure the app-wide newline
+sequence using `chat_newline_keys` in the root model's `PicleConfig`. Its default
+is the user-facing name `"alt+enter"`, translated internally to
+`("escape", "enter")`. A key name such as `"c-j"` replaces the default with
+Ctrl+J; a terminal mapping can then send that sequence for Shift+Enter.
+The chat documentation provides the VS Code mapping.
 
 Preserve the original message buffer for the handler. Ignore whitespace-only
 input. Check for line breaks in the original buffer before stripping whitespace
@@ -56,16 +59,17 @@ for slash-command parsing. Only single-line input beginning with `/` is
 dispatched as a command; a multiline buffer remains one message even when a
 line begins with `/`. This also applies to a buffer with a trailing newline.
 
-Keep multiline history entries in memory during the process, but exclude
-them from persisted history. Preserve the existing history file format and
-single-line entry behavior.
+Keep all chat input in separate in-memory history for the app instance.
+Do not mix chat messages with shell commands or persist them to the shell's
+history file. Preserve the existing shell history file format.
 
 ## Alternatives considered
 
 - **Rich prompts:** useful for formatted prompts, but do not provide the
   editable multiline buffer required here. Retain Rich for response output.
 - **Default prompt-toolkit multiline bindings:** Enter inserts a newline and
-  Alt+Enter submits. Reverse these bindings to meet the requested interaction.
+  Alt+Enter submits. Use Enter to submit and an app-configurable newline
+  sequence, defaulting to Alt+Enter.
 - **Expanding framed prompt:** needs less layout work but grows with the
   message. Select a fixed-height text area to keep the visible editor bounded.
 - **Opt-in multiline setting:** preserves the old chat editor but adds a
@@ -75,9 +79,10 @@ single-line entry behavior.
 
 ## Implementation outline
 
-1. Add a chat-specific input reader using a prompt-toolkit `TextArea`, frame,
-   scrollbar and controls hint in a non-full-screen layout. Reuse existing
-   history and completion adapters. Keep the normal shell's persistent
+1. Add a chat-specific branch in `App._read_interactive_input()` using a
+   prompt-toolkit `TextArea`, top and bottom separator lines,
+   scrollbar in a non-full-screen layout. Reuse existing
+   completion adapter and a separate in-memory chat history. Keep the normal shell's persistent
    `PromptSession` and `load-terminal` input path unchanged.
 2. Add submit and newline bindings local to the chat editor, including active
    completion handling. Ensure the editor releases terminal control on normal
@@ -86,8 +91,8 @@ single-line entry behavior.
 3. Update `App._run_chat_shell()` to preserve multiline message whitespace
    and apply the single-line slash-command rule. Keep lifecycle hooks,
    streaming, Ctrl+C and EOF behavior unchanged.
-4. Update `_PicleHistory` persistence to exclude entries containing newlines
-   while retaining them in memory. Keep ordinary shell input and
+4. Use a separate `InMemoryHistory` for chat input, retaining it across chat
+   sessions in the same app instance. Keep ordinary shell input and
    `load-terminal` collection unchanged.
 5. Document the editor, controls, command routing and history limitation in
    the chat interface page, and add a changelog entry when implemented.
@@ -119,8 +124,9 @@ restarting PICLE. Persistent multiline history can be considered separately.
 
 ## Implementation detail
 
-Select a practical default viewport height during implementation and constrain
-it to the available terminal height. This does not require a new public setting.
+The viewport defaults to five text rows. The chat model's
+`PicleConfig.chat_input_height` configures its height, excluding separator
+lines. Reduce it to fit the available terminal height, with a minimum of one row.
 
 ## References
 

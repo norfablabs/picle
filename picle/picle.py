@@ -23,12 +23,16 @@ from typing import Any, Optional, Union, get_args, get_origin, Dict
 from pydantic import ValidationError, Json
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic.fields import FieldInfo
-from prompt_toolkit import PromptSession
+from prompt_toolkit import Application, PromptSession
+from prompt_toolkit.application import get_app
 from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.filters import Condition
-from prompt_toolkit.history import History
+from prompt_toolkit.history import History, InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Float, FloatContainer, HSplit, Layout, Window
+from prompt_toolkit.layout.menus import CompletionsMenu
+from prompt_toolkit.widgets import TextArea
 from .utils import run_print_exception
 from .models import MAN
 
@@ -163,7 +167,9 @@ class _PicleHistory(History):
         if not self.filename:
             return
 
-        history_strings = self.get_strings()
+        history_strings = [
+            line for line in self.get_strings() if "\n" not in line and "\r" not in line
+        ]
         if self.length >= 0:
             history_strings = history_strings[-self.length :] if self.length else []
 
@@ -178,6 +184,15 @@ class App(picle_cmd.Cmd):
 
     Args:
         root: Root/Top Pydantic model.
+        stdin (Any): Optional input stream for the command loop.
+        stdout (Any): Optional output stream for shell output.
+
+    Attributes:
+        chat_newline_keys: App-wide chat newline binding, default ``"alt+enter"``.
+            Set on the root model's ``PicleConfig`` or on the App instance.
+            Accepts ``"alt+enter"``, a prompt-toolkit key name such as ``"c-j"``,
+            or a tuple of key names. Alt+Enter is translated internally to
+            the terminal's Escape/Enter sequence. Enter submits chat messages.
     """
 
     ruler = ""
@@ -185,6 +200,7 @@ class App(picle_cmd.Cmd):
     prompt = "picle#"
     newline = "\r\n"
     completekey = "tab"
+    chat_newline_keys = "alt+enter"
     use_rich = True
     history_length = 100
     history_file = "picle_history.txt"
@@ -205,6 +221,9 @@ class App(picle_cmd.Cmd):
             self.use_rich = getattr(self.shell.PicleConfig, "use_rich", self.use_rich)
             self.completekey = getattr(
                 self.shell.PicleConfig, "completekey", self.completekey
+            )
+            self.chat_newline_keys = getattr(
+                self.shell.PicleConfig, "chat_newline_keys", self.chat_newline_keys
             )
             self.history_length = getattr(
                 self.shell.PicleConfig, "history_length", self.history_length
@@ -227,6 +246,7 @@ class App(picle_cmd.Cmd):
         super(App, self).__init__(stdin=stdin, stdout=stdout)
 
         self._history = _PicleHistory(self.history_file, self.history_length)
+        self._chat_history = InMemoryHistory()
         self._prompt_completer = _PicleCompleter(self)
         self._inline_help_enabled = False
         self._last_inline_help = None
@@ -255,8 +275,83 @@ class App(picle_cmd.Cmd):
         line = f"{document.text_before_cursor}{suffix}"
         run_in_terminal(lambda: self.process_help_command(line), render_cli_done=True)
 
-    def _read_interactive_input(self, prompt: str, inline_help: bool = True) -> str:
-        """Read a line using one persistent prompt_toolkit session."""
+    def _read_interactive_input(
+        self,
+        prompt: str,
+        inline_help: bool = True,
+        chat: bool = False,
+        chat_input_height: int = 5,
+    ) -> str:
+        """Read shell input or a message from the fixed-height chat editor."""
+        if chat:
+            editor = TextArea(
+                multiline=True,
+                height=lambda: max(
+                    1, min(chat_input_height, get_app().output.get_size().rows - 3)
+                ),
+                scrollbar=True,
+                history=self._chat_history,
+                completer=self._prompt_completer if self.completekey else None,
+                complete_while_typing=False,
+            )
+            bindings = KeyBindings()
+            newline_keys = self.chat_newline_keys
+            if newline_keys == "alt+enter":
+                newline_keys = ("escape", "enter")
+            elif isinstance(newline_keys, str):
+                newline_keys = (newline_keys,)
+
+            @bindings.add("enter")
+            def submit(event):
+                buffer = event.current_buffer
+                if not buffer.text.strip():
+                    return
+                if buffer.complete_state:
+                    buffer.complete_state = None
+                else:
+                    buffer.append_to_history()
+                    event.app.exit(result=buffer.text)
+
+            @bindings.add(*newline_keys)
+            def newline(event):
+                event.current_buffer.insert_text("\n")
+
+            @bindings.add("c-c")
+            def interrupt(event):
+                event.app.exit(exception=KeyboardInterrupt())
+
+            @bindings.add("c-d")
+            def eof(event):
+                if event.current_buffer.text:
+                    event.current_buffer.delete()
+                else:
+                    event.app.exit(exception=EOFError())
+
+            message = Application(
+                layout=Layout(
+                    FloatContainer(
+                        content=HSplit(
+                            [
+                                Window(height=1, char="─"),
+                                editor,
+                                Window(height=1, char="─"),
+                            ]
+                        ),
+                        floats=[
+                            Float(xcursor=True, ycursor=True, content=CompletionsMenu())
+                        ],
+                    ),
+                    focused_element=editor,
+                ),
+                key_bindings=bindings,
+                full_screen=False,
+                erase_when_done=True,
+            ).run()
+            # Keep the complete submitted message in terminal scrollback.
+            self.stdout.write(f"{prompt}{message}{self.newline}")
+            self.stdout.flush()
+            return message
+
         if self._prompt_session is None:
             self._prompt_session = PromptSession(
                 history=self._history,
@@ -549,8 +644,11 @@ class App(picle_cmd.Cmd):
         while True:
             try:
                 line = self._read_interactive_input(
-                    chat_prompt, inline_help=False
-                ).strip()
+                    chat_prompt,
+                    inline_help=False,
+                    chat=True,
+                    chat_input_height=getattr(picle_config, "chat_input_height", 5),
+                )
             except EOFError:
                 self.stdout.write(self.newline)
                 break
@@ -558,12 +656,16 @@ class App(picle_cmd.Cmd):
                 self.stdout.write(self.newline)
                 return True
 
-            if not line:
+            if not line.strip():
                 continue
 
             # dispatch /commands to the chat_commands_model
-            if line.startswith(cmd_prefix):
-                picle_command = line[len(cmd_prefix) :]
+            if (
+                "\n" not in line
+                and "\r" not in line
+                and line.strip().startswith(cmd_prefix)
+            ):
+                picle_command = line.strip()[len(cmd_prefix) :]
                 if picle_command == "exit":
                     self.do_exit(picle_command)
                     break
