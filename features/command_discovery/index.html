@@ -296,6 +296,26 @@
   
 
       
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../development/adr-001-multiline-chat-input/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -1112,6 +1132,121 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/adr-001-multiline-chat-input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-001: Multiline Chat Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/adr-002-ssh-server-support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002: SSH Server Support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1267,8 +1402,12 @@
     <span class="n">devices</span><span class="p">:</span> <span class="n">DeviceTools</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Device operations&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="inline-help">Inline Help</h2>
-<p>Use <code>?</code> to show the next valid command field.</p>
-<p>Use <code>??</code> to show the same list with extra details such as defaults and field types.</p>
+<p>Press <code>?</code> to show the next valid command field immediately. The current command
+stays in the input buffer so you can continue editing it after reading the help.</p>
+<p>Press <code>?</code> twice to show the same list with extra details such as defaults and field
+types.</p>
+<p>The key is not inserted into the command buffer. This binding applies only to the
+main command prompt; <code>?</code> remains ordinary text in multi-line and chat input.</p>
 <div class="highlight"><pre><span></span><code>picle#devices?
  ... available fields under `devices` ...
 
@@ -1303,7 +1442,8 @@ picle#help dev
  ... partial-match help for `devices` ...
 </code></pre></div>
 <h2 id="tab-completion">Tab Completion</h2>
-<p>Tab completion is available through the standard <code>cmd.Cmd</code> hooks.</p>
+<p>Tab completion uses <code>prompt_toolkit</code> for terminal input and delegates candidates to
+PICLE's existing <code>cmd</code>-style <code>completenames()</code> and <code>completedefault()</code> hooks.</p>
 <ul>
 <li>The first token completes top-level fields and built-in commands such as <code>exit</code>, <code>top</code>, and <code>help</code>.</li>
 <li>Nested completion works after you have already entered part of a command path.</li>

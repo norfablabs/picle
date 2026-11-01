@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#0122" class="md-skip">
+        <a href="#0131-draft" class="md-skip">
           Skip to content
         </a>
       
@@ -296,6 +296,26 @@
   
 
       
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../development/adr-001-multiline-chat-input/" class="md-tabs__link">
+          
+  
+  
+  Development
+
+        </a>
+      </li>
+    
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -496,6 +516,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CHANGES
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#bugs" class="md-nav__link">
@@ -1068,6 +1099,121 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/adr-001-multiline-chat-input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-001: Multiline Chat Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../development/adr-002-ssh-server-support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ADR-002: SSH Server Support
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1093,6 +1239,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CHANGES
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#bugs" class="md-nav__link">
@@ -1136,19 +1293,63 @@
   
 
 
-<h1 id="0122">0.12.2</h1>
+<h1 id="0131-draft">0.13.1 (draft)</h1>
+<h2 id="changes">CHANGES</h2>
+<ol>
+<li>Chat now keeps one input layout alive during operations. Handlers run off the UI thread; input stays editable, while submission and Ctrl+C/Ctrl+D termination are disabled until the operation finishes.</li>
+<li>Removed chat streaming responses. Handlers return complete answers and can report intermediate progress through <code>ChatSession.write()</code>.</li>
+<li>Removed <code>/end</code> from chat commands, completion and help. Use <code>/exit</code> to leave chat; the normal shell's <code>end</code> command remains available.</li>
+<li>Replaced the bundled copy of Python's command interpreter with a thin <code>cmd.Cmd</code> subclass. Retained PICLE's interactive input, command-loop and completion adaptations while using standard-library parsing, dispatch and help utilities.</li>
+</ol>
 <h2 id="bugs">BUGS</h2>
+<ol>
+<li>Validate pipe arguments against the pipe model so invalid types and field constraints prevent handler execution.</li>
+<li>Reject invalid enum values instead of silently discarding them and executing with defaults.</li>
+<li>Stop collecting compact JSON once its closing delimiter is present, preserving following arguments and pipe commands.</li>
+<li>Prevent <code>top</code> and subshell <code>exit</code> from raising an error when <code>PicleConfig</code> does not define <code>prompt</code>.</li>
+<li>Honor termination results from custom chat slash commands and run the chat exit hook once.</li>
+<li>Fixed importing PICLE without Rich installed by deferring the command-tree type annotation.</li>
+</ol>
+<h2 id="enhancements">ENHANCEMENTS</h2>
+<ol>
+<li>Added optional synchronous <code>chat_on_enter(**kwargs)</code> and <code>chat_on_exit(**kwargs)</code> methods on chat command models to initialize and release application context once per session. Hooks receive the same resolved keyword arguments as the message handler.</li>
+<li>Chat input now uses a fixed-height multiline editor with top and bottom separator lines and a scrollbar. Enter submits; Alt+Enter inserts a newline by default. The root model's <code>PicleConfig.chat_newline_keys</code> setting customizes the app-wide newline sequence. Multiline messages preserve whitespace and remain in memory-only history; only single-line slash input executes as a command.</li>
+<li>Added chat-model <code>PicleConfig.chat_input_height</code> to configure visible input rows (default five). Removed the keyboard-controls hint row to save terminal space.</li>
+<li>Separated in-memory chat history from persistent shell command history, so leaving chat restores shell-only Up/Down recall.</li>
+<li>Moved the chat editor and execution loop into <code>picle/chat.py</code>, preserving existing App entry points, hooks, settings, history and output behavior.</li>
+<li>Added named <code>chat</code> injection for the active handler, with plain-text progress, animated status, and sequential Allow/Deny approvals. Output remains in terminal scrollback above the status, approval and input sections. Hooks receive command arguments only. Simplified chat to one persistent input path without callback-thread support or shell-state restoration; <code>/exit</code> retains normal shell exit handling.</li>
+<li>Added <code>chat.set_footer(text="")</code> for a persistent single-line footer below the input. Empty text hides it; the footer resets when the chat session ends.</li>
+</ol>
+<hr />
+<h1 id="0130">0.13.0</h1>
+<h2 id="changes_1">CHANGES</h2>
+<ol>
+<li>Replaced <code>pyreadline3</code> with <code>prompt_toolkit</code> as PICLE's interactive line-editing backend. The new backend is used consistently on Windows, Linux, and macOS for terminal input, cursor movement, completion, and command history, while PICLE's existing parser and command dispatch remain unchanged.</li>
+</ol>
+<h2 id="bugs_1">BUGS</h2>
+<ol>
+<li>Fixed Enter and newline rendering in the VS Code integrated terminal on Windows while retaining completion and persistent history.</li>
+<li>Routed multi-line and chat sub-prompts through the persistent prompt session so Ctrl+D continues to signal EOF on Windows.</li>
+</ol>
+<h2 id="enhancements_1">ENHANCEMENTS</h2>
+<ol>
+<li>Added a persistent <code>PromptSession</code> completion adapter that reuses PICLE's existing <code>completenames()</code> and <code>completedefault()</code> behavior without changing parsing or command dispatch.</li>
+<li>Added an interactive <code>?</code> key binding that displays contextual help immediately without submitting or changing the current command buffer. Each request preserves the visible command line above its help output, and pressing <code>?</code> twice shows verbose help.</li>
+</ol>
+<hr />
+<h1 id="0122">0.12.2</h1>
+<h2 id="bugs_2">BUGS</h2>
 <ol>
 <li>Fixing python 3.14 + compatibility- factorized cmd.py and updated it to work with pyreadline3</li>
 <li>Fixing handling of quoted json string like '["key": "valu"]'</li>
 </ol>
-<h2 id="enhancements">ENHANCEMENTS</h2>
+<h2 id="enhancements_2">ENHANCEMENTS</h2>
 <ol>
 <li>Nested with table improved to handle lists of string or integer items, and simple dictionaries, converting them to tables of single row.</li>
 </ol>
 <hr />
 <h1 id="0121">0.12.1</h1>
-<h2 id="bugs_1">BUGS</h2>
+<h2 id="bugs_3">BUGS</h2>
 <ol>
 <li>Fixing command validation handling to make sure if validation succeeds but no data returned its not blocking the command</li>
 <li>Enhancing outputters handling for chat shell model</li>
@@ -1163,7 +1364,7 @@
 </ol>
 <hr />
 <h1 id="0112">0.11.2</h1>
-<h2 id="changes">CHANGES</h2>
+<h2 id="changes_2">CHANGES</h2>
 <ol>
 <li>Enhancing nested output to color code dictionary key levels if Rich in use</li>
 </ol>
@@ -1171,7 +1372,7 @@
 <ol>
 <li>Adding support for model <code>source_&lt;field name&gt;</code> method to accept <code>choice</code> argument that holds current variable value</li>
 </ol>
-<h2 id="bugs_2">BUGS</h2>
+<h2 id="bugs_4">BUGS</h2>
 <ol>
 <li>Fixing handling of field source collection when has only one value for the variable</li>
 </ol>
@@ -1183,7 +1384,7 @@
 <li>Adding support negate <code>no</code> command to configuraiton model, negate arguments are dynamically constructed for every model</li>
 <li>Adding <code>last</code> filter to pipe functions to return last N lines of output</li>
 </ol>
-<h2 id="enhancements_1">ENHANCEMENTS</h2>
+<h2 id="enhancements_3">ENHANCEMENTS</h2>
 <ol>
 <li>Updating outputter_kv to support flatenning arbitrary nested structures .</li>
 <li>
@@ -1204,18 +1405,18 @@
 <li>Adding commands history persistency across shells, added <code>picle_file</code> config attribute to indicate where to store commands, default is <code>picle_history.txt</code></li>
 <li>Support added to handle parsing of cli commands into dynamic dictionaries, added <code>pkey</code> and <code>pkey_description</code> config parameters to <code>json_schema_extra</code></li>
 </ol>
-<h2 id="changes_1">CHANGES</h2>
+<h2 id="changes_3">CHANGES</h2>
 <ol>
 <li>Enhanced MAN model to output tree for dynamic dictionaries models</li>
 <li>Changing history handling to use <code>pyreadline</code> module</li>
 </ol>
 <hr />
 <h1 id="0101">0.10.1</h1>
-<h2 id="bugs_3">BUGS</h2>
+<h2 id="bugs_5">BUGS</h2>
 <ol>
 <li>MAN fixing examples output when examples are anything but string</li>
 </ol>
-<h2 id="changes_2">CHANGES</h2>
+<h2 id="changes_4">CHANGES</h2>
 <ol>
 <li>Making mandatory fields to be at the top of help output and in bold cursor</li>
 <li>To invoke multiline input mode changing command from <code>input</code> to <code>load-terminal</code></li>
@@ -1228,7 +1429,7 @@
 </ol>
 <hr />
 <h1 id="0100">0.10.0</h1>
-<h2 id="changes_3">CHANGES</h2>
+<h2 id="changes_5">CHANGES</h2>
 <ol>
 <li>Dependencies updates to loosen them up</li>
 <li>Adding type hints throughout and updating doc strings</li>
@@ -1238,7 +1439,7 @@
 <ol>
 <li>Added ConfigModel model to picle to help with maintaininng configuration files using Picle interactive shell.</li>
 </ol>
-<h2 id="bugs_4">BUGS</h2>
+<h2 id="bugs_6">BUGS</h2>
 <ol>
 <li><strong>init</strong> ~L97 -PicleConfig accessed without hasattr guard — crash for models without it</li>
 <li>do_help ~L855 - Multi-word help silently discarded — never printed</li>
@@ -1250,13 +1451,13 @@
 </ol>
 <hr />
 <h1 id="093">0.9.3</h1>
-<h2 id="changes_4">CHANGES</h2>
+<h2 id="changes_6">CHANGES</h2>
 <ol>
 <li>Improving outputter models handling</li>
 </ol>
 <hr />
 <h1 id="092">0.9.2</h1>
-<h2 id="changes_5">CHANGES</h2>
+<h2 id="changes_7">CHANGES</h2>
 <ol>
 <li>Improved value conversion logic to not convert values to integers or bool etc if field annotation is <code>str</code> or <code>StrictStr</code></li>
 <li>Updated <code>pyproject.toml</code> file with dependency version for PyYAML and Tabulate modules</li>
@@ -1269,7 +1470,7 @@
 </ol>
 <hr />
 <h1 id="090">0.9.0</h1>
-<h2 id="changes_6">CHANGES</h2>
+<h2 id="changes_8">CHANGES</h2>
 <ol>
 <li>Removed support for using <code>Callable</code> annotation for calling model method</li>
 <li>Removed formatters from built in models, instead need to use outputter</li>
