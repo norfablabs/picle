@@ -1,5 +1,13 @@
 # 0.13.1 (draft)
 
+## BUGS
+
+1. Validate pipe arguments against the pipe model so invalid types and field constraints prevent handler execution.
+2. Reject invalid enum values instead of silently discarding them and executing with defaults.
+3. Stop collecting compact JSON once its closing delimiter is present, preserving following arguments and pipe commands.
+4. Prevent `top` and subshell `exit` from raising an error when `PicleConfig` does not define `prompt`.
+5. Honor termination results from chat slash commands, including `/end`, and run the chat exit hook once.
+
 ## ENHANCEMENTS
 
 1. Added optional synchronous `chat_on_enter(**kwargs)` and `chat_on_exit(**kwargs)` methods on chat command models to initialize and release application context once per session. Hooks receive the same resolved keyword arguments as the message handler.

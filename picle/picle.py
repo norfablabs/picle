@@ -617,10 +617,9 @@ class App(picle_cmd.Cmd):
         run_function: callable,
         kw: dict,
         picle_config: Any,
-        chat_commands_model: Any,
     ) -> Optional[bool]:
         """
-        Run an interactive chat shell with mounted command model.
+        Run an interactive chat shell using the mounted command model.
 
         Repeatedly prompts the user for input and calls the run function with
         each line as the first positional argument. Lines starting with `/` are
@@ -630,7 +629,6 @@ class App(picle_cmd.Cmd):
             run_function: The function to call for each user message.
             kw: Base keyword arguments to pass to the function.
             picle_config: The PicleConfig instance for chat settings.
-            chat_commands_model: The Pydantic model class for `/` commands.
 
         Returns:
             Optional[bool]: None or True to signal the shell should exit.
@@ -669,7 +667,9 @@ class App(picle_cmd.Cmd):
                 if picle_command == "exit":
                     self.do_exit(picle_command)
                     break
-                self.onecmd(picle_command)
+                if self.onecmd(picle_command) is True:
+                    self.is_chat = False
+                    return True
                 continue
 
             # call the function with user input as first positional arg
@@ -746,7 +746,7 @@ class App(picle_cmd.Cmd):
 
     def _validate_values(self, models: list) -> Optional[dict]:
         """
-        Validate current model field values against the root or current shell model.
+        Validate field values against the pipe, root, or current shell model.
 
         Aggregates field values collected from each model in 'models' (processed in reverse order) into a nested dictionary and validates the resulting data against the appropriate Pydantic model.
 
@@ -772,8 +772,11 @@ class App(picle_cmd.Cmd):
 
         log.debug(f"Validating collected data against root model, data: {data}")
         try:
+            # Pipe segments belong to their own model, not the current shell.
+            if models[0]["parameter"] == "|":
+                models[0]["model"](**data["|"])
             # validate against root model
-            if len(self.shells) == 1:
+            elif len(self.shells) == 1:
                 self.root(**data)
             # validate against current shell model
             else:
@@ -908,11 +911,9 @@ class App(picle_cmd.Cmd):
             elif parameter.strip().startswith(("{", "[")) and current_field:
                 close = "}" if parameter.strip().startswith("{") else "]"
                 value_items = [parameter]
-                while parameters:
+                while parameters and not parameter.strip().endswith(close):
                     parameter = parameters.pop(0)
                     value_items.append(parameter)
-                    if parameter.strip().endswith(close):
-                        break
                 self._save_collected_value(current_field, " ".join(value_items))
 
             # collect quoted field value (single or double quotes)
@@ -1012,6 +1013,8 @@ class App(picle_cmd.Cmd):
                     for i in current_field["field"].annotation
                 ):
                     raise FieldLooseMatchOnly(current_model, parameter)
+                else:
+                    self._save_collected_value(current_field, parameter)
 
             # check if parameter partially matches any model field
             elif self._has_partial_match(current_model["model"], parameter):
@@ -1384,7 +1387,7 @@ class App(picle_cmd.Cmd):
             if self.shells:
                 self.shell = self.shells[-1]
                 if hasattr(self.shell, "PicleConfig") and getattr(
-                    self.shell.PicleConfig, "prompt"
+                    self.shell.PicleConfig, "prompt", None
                 ):
                     self.prompt = self.shell.PicleConfig.prompt
                 if len(self.shells) == 1:  # check if reached top shell
@@ -1401,12 +1404,10 @@ class App(picle_cmd.Cmd):
         else:
             self.shell = self.shells[0]
             if hasattr(self.shell, "PicleConfig") and getattr(
-                self.shell.PicleConfig, "prompt"
+                self.shell.PicleConfig, "prompt", None
             ):
                 self.prompt = self.shell.PicleConfig.prompt
-            while self.shells:
-                _ = self.shells.pop()
-            self.shells.append(self.shell)
+            self.shells[:] = [self.shell]
             # set shell defaults
             self.defaults_set(self.shell)
 
@@ -1691,10 +1692,11 @@ class App(picle_cmd.Cmd):
                         chat_commands_model = getattr(
                             picle_config, "chat_commands_model", None
                         )
-                        kw = {}
-                        kw.update(self.shell_defaults)
-                        kw.update(command_defaults)
-                        kw.update(command_arguments)
+                        kw = {
+                            **self.shell_defaults,
+                            **command_defaults,
+                            **command_arguments,
+                        }
                         if hasattr(model, "chat_on_enter"):
                             model.chat_on_enter(**kw)
                         try:
@@ -1705,7 +1707,6 @@ class App(picle_cmd.Cmd):
                                 run_function=run_function,
                                 kw=kw,
                                 picle_config=picle_config,
-                                chat_commands_model=chat_commands_model,
                             )
                         finally:
                             if hasattr(model, "chat_on_exit"):
@@ -1720,9 +1721,12 @@ class App(picle_cmd.Cmd):
                     if callable_expects_argument(run_function, "picle_app"):
                         kw["picle_app"] = self
                     if index == 0:
-                        kw.update(self.shell_defaults)
-                        kw.update(command_defaults)
-                        kw.update(command_arguments)
+                        kw = {
+                            **kw,
+                            **self.shell_defaults,
+                            **command_defaults,
+                            **command_arguments,
+                        }
                         ret = run_function(**kw)
                     else:
                         kw.update(command_defaults)
