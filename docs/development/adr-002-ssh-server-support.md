@@ -1,8 +1,16 @@
-# SSH server support architecture design review
+# ADR-002: SSH server support
 
 - Status: Proposed
 - Date: 2026-09-05
-- Scope: Design review only
+- Scope: Architecture proposal; implementation pending
+
+## Context
+
+PICLE needs a design for optional remote interactive sessions over SSH on
+Windows and Linux. The transport must bridge asynchronous SSH streams and
+PICLE's synchronous command execution while isolating each session's state,
+output and history. Host-account authentication and command authorization
+must remain separate from the OS identity under which commands execute.
 
 ## Decision
 
@@ -57,7 +65,7 @@ PAM and `LogonUser` authentication are feasible, but must be isolated behind pla
 
 Each SSH channel therefore needs a new `App` and root-model instance, isolated output, and isolated or disabled history.
 
-## Options
+## Alternatives considered
 
 | Option | Benefits | Problems | Decision |
 | --- | --- | --- | --- |
@@ -68,7 +76,7 @@ Each SSH channel therefore needs a new `App` and root-model instance, isolated o
 
 OpenSSH can restrict users to PICLE through a forced command or subsystem. Forwarding must be disabled separately. See the [OpenSSH server configuration manual](https://man.openbsd.org/sshd_config) and [Windows OpenSSH configuration](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh-server-configuration).
 
-## Recommended design
+## Proposed architecture
 
 ```text
 Embedded mode
@@ -178,7 +186,7 @@ The execution check is authoritative. Hiding a command from help or completion i
 
 The default `allow *` policy includes built-in commands such as `shell`. This preserves existing PICLE behavior but means every authenticated user can execute commands with the server account's privileges unless an administrator adds an explicit deny rule. Production examples should deny `shell` unless it is required.
 
-## Required defaults
+## Consequences and required defaults
 
 - Bind to loopback unless external listening is explicitly configured.
 - Require a persistent host key; fail closed if it is missing or insecure.

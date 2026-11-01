@@ -32,6 +32,9 @@ nav:
   - Configuration Model: features/configuration_model.md
   - Dynamic Dictionaries: features/dynamic_dictionary_input.md
 - API Reference: api_reference.md
+- Development:
+  - 'ADR-001: Multiline Chat Input': development/adr-001-multiline-chat-input.md
+  - 'ADR-002: SSH Server Support': development/adr-002-ssh-server-support.md
 plugins:
 - search
 - mkdocstrings:
