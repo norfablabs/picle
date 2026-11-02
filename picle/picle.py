@@ -236,13 +236,16 @@ class App(picle_cmd.Cmd):
             json.dumps([id(model), field["name"], kwargs], sort_keys=True),
         ).hex
 
-        expires, result = self.source_cache.get(key, (0, None))
-        # Refresh missing or expired choices after a successful source call.
-        if expires <= time.monotonic():
+        # Remove expired choices before looking up the current request.
+        now = time.monotonic()
+        self.source_cache = {
+            key: entry for key, entry in self.source_cache.items() if entry[0] > now
+        }
+        if key not in self.source_cache:
             result = list(source(**kwargs))
             self.source_cache[key] = (time.monotonic() + ttl, result)
         # Return a copy to protect cached choices.
-        return list(result)
+        return list(self.source_cache[key][1])
 
     def clear_source_cache(self):
         """Clear all cached source choices for this App instance."""

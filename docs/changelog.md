@@ -1,4 +1,12 @@
-# 0.13.2 (unreleased)
+# 0.13.3 (unreleased)
+
+## BUGS
+
+1. Remove expired source cache entries before each cache lookup, preventing stale choices from accumulating across different source arguments.
+
+---
+
+# 0.13.2
 
 ## ENHANCEMENTS
 

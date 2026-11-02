@@ -204,6 +204,26 @@ def test_source_cache_sharing_expiry_and_clearing(shell, monkeypatch):
     assert len(calls) == 5
 
 
+def test_source_cache_removes_expired_entries(shell, monkeypatch):
+    app, tasks = shell
+    now = [100.0]
+    monkeypatch.setattr("picle.picle.time.monotonic", lambda: now[0])
+    tasks.model_fields["name"].json_schema_extra = {"source_cache_ttl": 10}
+    tasks.source_name = staticmethod(lambda service="all": [service])
+
+    discover(app, "completion", "tasks service old name ")
+    now[0] = 105.0
+    discover(app, "help", "tasks service live name ")
+    assert len(app.source_cache) == 2
+
+    now[0] = 110.0
+    discover(app, "completion", "tasks service new name ")
+    assert sorted(entry[1] for entry in app.source_cache.values()) == [
+        ["live"],
+        ["new"],
+    ]
+
+
 @pytest.mark.parametrize("ttl", [None, 0, -1])
 def test_source_cache_disabled(shell, ttl):
     app, tasks = shell
