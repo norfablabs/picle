@@ -45,16 +45,17 @@ Note: command tokens come from the field name (or its `alias` / `serialization_a
 | Key | Meaning |
 | --- | --- |
 | `function` | Name of a model `@staticmethod` to call when `run()` is absent |
-| `presence` | Constant value used when field is referenced without a value |
-| `processors` | List of callables applied to the command result |
+| `multiline` | If `True`, the literal value `input` triggers multi-line collection |
 | `outputter` | Callable that formats output for this field (overrides model outputter) |
 | `outputter_kwargs` | Extra kwargs passed into `outputter` |
-| `multiline` | If `True`, the literal value `input` triggers multi-line collection |
-| `root_model` | If `True`, pass the app root model as `root_model=...` |
 | `picle_app` | If `True`, pass the `App` instance as `picle_app=...` |
-| `use_parent_run` | If `True` (default), and the leaf model has no `run()`, PICLE searches parent models for a `run()` to execute. If `False`, the command errors unless the leaf model defines `run()` or `function`. |
 | `pkey` | Primary key name to use for dynamic dictionary models |
 | `pkey_description` | Description of dynamic dictionary model primary key |
+| `presence` | Constant value used when field is referenced without a value |
+| `processors` | List of callables applied to the command result |
+| `root_model` | If `True`, pass the app root model as `root_model=...` |
+| `source_cache_ttl` | Source choice cache TTL in seconds; disabled by default |
+| `use_parent_run` | If `True` (default), and the leaf model has no `run()`, PICLE searches parent models for a `run()` to execute. If `False`, the command errors unless the leaf model defines `run()` or `function`. |
 
 ## Handling of `function` Argument vs `run()` Method
 
