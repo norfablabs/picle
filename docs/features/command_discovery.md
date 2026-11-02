@@ -110,8 +110,25 @@ PICLE's existing `cmd`-style `completenames()` and `completedefault()` hooks.
 - The first token completes top-level fields and built-in commands such as `exit`, `top`, and `help`.
 - Nested completion works after you have already entered part of a command path.
 - Enum fields complete from enum values.
-- `source_<field>` methods feed completion candidates for dynamic values, `source_<field>` can have `choice` argument defined to receive partial current value for the field, to alter return options behaviour
+- `source_<field>` methods provide dynamic choices for completion and help.
 - Multiline fields complete the special `load-terminal` token.
+
+Source methods can declare named arguments to receive parsed command values:
+
+```python
+@staticmethod
+def source_name(service="all"):
+    return lookup_task_names(service=service)
+```
+
+For `man tasks service nornir name <TAB>`, this receives `service="nornir"`.
+Absent values keep the source's defaults. Values come from the current model and
+its ancestors within the same pipeline command; nearer values win, and aliases
+resolve to Python field names. Use ordinary named parameters; `*args`, keyword-only
+parameters and `**kwargs` receive no context.
+
+An optional `choice` parameter receives the current completion token, or `""` for
+help. No-argument sources remain supported.
 
 ```text
 devices cli <TAB>

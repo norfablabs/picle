@@ -92,6 +92,23 @@ def callable_expects_argument(func: callable, arg_name: str) -> bool:
         return False
 
 
+def call_source(source: callable, models: list, choice: str):
+    """Call a source with  parsed values from command"""
+    parameters = inspect.signature(source).parameters
+    kwargs = {}
+    values = {
+        field["name"]: field["values"]
+        for model in models
+        for field in model["fields"]
+        if field["values"] is not ...
+    }
+    values["choice"] = choice
+    for name, parameter in parameters.items():
+        if parameter.kind == parameter.POSITIONAL_OR_KEYWORD and name in values:
+            kwargs[name] = values[name]
+    return source(**kwargs)
+
+
 class FieldLooseMatchOnly(Exception):
     """
     Raised when a parameter is not an exact match of any model field but one or more field names start with the parameter string.
@@ -911,10 +928,7 @@ class App(picle_cmd.Cmd):
                 source_callable = getattr(
                     model["model"], f"source_{last_field['name']}"
                 )
-                if callable_expects_argument(source_callable, "choice"):
-                    options = source_callable(choice="")
-                else:
-                    options = source_callable()
+                options = call_source(source_callable, models[-1], choice="")
                 lines[name] = ", ".join([str(i) for i in options])
             else:
                 lines[name] = f"{field.description}"
@@ -1042,10 +1056,9 @@ class App(picle_cmd.Cmd):
                 # check if model has method to source field choices
                 elif hasattr(last_model, f"source_{last_field_name}"):
                     source_callable = getattr(last_model, f"source_{last_field_name}")
-                    if callable_expects_argument(source_callable, "choice"):
-                        fieldnames = source_callable(choice=text)
-                    else:
-                        fieldnames = source_callable()
+                    fieldnames = call_source(
+                        source_callable, command_models[-1], choice=text
+                    )
                     # handle partial match
                     if last_field_value not in fieldnames:
                         fieldnames = [

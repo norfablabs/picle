@@ -1,3 +1,11 @@
+# 0.13.2 (unreleased)
+
+## ENHANCEMENTS
+
+1. Completion and help now pass already parsed command arguments to matching named parameters of `source_<field>` methods. Sources can use selected values such as `service` to provide context-aware choices. CLI aliases resolve to Python field names, nearer model values take precedence, and context stays within the current pipeline command. Absent arguments retain source defaults; existing no-argument and `choice` sources remain supported.
+
+---
+
 # 0.13.1
 
 ## CHANGES
