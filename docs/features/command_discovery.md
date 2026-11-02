@@ -130,6 +130,17 @@ parameters and `**kwargs` receive no context.
 An optional `choice` parameter receives the current completion token, or `""` for
 help. No-argument sources remain supported.
 
+To cache source choices for a field, set a TTL in seconds:
+
+```python
+name: StrictStr = Field(None, json_schema_extra={"source_cache_ttl": 60})
+```
+
+Completion and help share cached choices when the model, field and source
+arguments match, including `choice` when declared. Each App has its own cache.
+Missing or nonpositive TTL disables caching; errors are never cached.
+Call `app.clear_source_cache()` to refresh choices before expiry.
+
 ```text
 devices cli <TAB>
   -> suggests fields such as `commands`, `hosts`, and `plugin`

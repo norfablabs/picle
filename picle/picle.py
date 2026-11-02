@@ -18,6 +18,9 @@ import platform
 import inspect
 import difflib
 import subprocess
+import time
+import json
+import uuid
 
 from typing import Any, Optional, Union, get_args, get_origin, Dict
 from pydantic import ValidationError, Json
@@ -90,23 +93,6 @@ def callable_expects_argument(func: callable, arg_name: str) -> bool:
     except (ValueError, TypeError):
         # Some built-in functions don't have inspectable signatures
         return False
-
-
-def call_source(source: callable, models: list, choice: str):
-    """Call a source with  parsed values from command"""
-    parameters = inspect.signature(source).parameters
-    kwargs = {}
-    values = {
-        field["name"]: field["values"]
-        for model in models
-        for field in model["fields"]
-        if field["values"] is not ...
-    }
-    values["choice"] = choice
-    for name, parameter in parameters.items():
-        if parameter.kind == parameter.POSITIONAL_OR_KEYWORD and name in values:
-            kwargs[name] = values[name]
-    return source(**kwargs)
 
 
 class FieldLooseMatchOnly(Exception):
@@ -219,10 +205,54 @@ class App(picle_cmd.Cmd):
     history_length = 100
     history_file = "picle_history.txt"
 
+    def call_source(self, source: callable, models: list, choice: str):
+        """Call a source with parsed arguments, optionally caching its choices."""
+        parameters = inspect.signature(source).parameters
+        kwargs = {}
+        # Collect resolved values, letting nearer models override ancestors.
+        values = {
+            field["name"]: field["values"]
+            for model in models
+            for field in model["fields"]
+            if field["values"] is not ...
+        }
+        # Use the current token for choice, or an empty string for help.
+        values["choice"] = choice
+        # Pass only named arguments accepted by the source.
+        for name, parameter in parameters.items():
+            if parameter.kind == parameter.POSITIONAL_OR_KEYWORD and name in values:
+                kwargs[name] = values[name]
+        field = models[-1]["fields"][-1]
+        ttl = field["json_schema_extra"].get("source_cache_ttl")
+        # Cache only when a positive TTL is configured.
+        if not ttl or ttl <= 0:
+            return source(**kwargs)
+
+        model = models[-1]["model"]
+        model = model if isinstance(model, type) else type(model)
+        # Share cached choices for the same model, field and arguments.
+        key = uuid.uuid5(
+            uuid.NAMESPACE_OID,
+            json.dumps([id(model), field["name"], kwargs], sort_keys=True),
+        ).hex
+
+        expires, result = self.source_cache.get(key, (0, None))
+        # Refresh missing or expired choices after a successful source call.
+        if expires <= time.monotonic():
+            result = list(source(**kwargs))
+            self.source_cache[key] = (time.monotonic() + ttl, result)
+        # Return a copy to protect cached choices.
+        return list(result)
+
+    def clear_source_cache(self):
+        """Clear all cached source choices for this App instance."""
+        self.source_cache.clear()
+
     def __init__(self, root: object, stdin=None, stdout=None):
         self.root = root
         self.shell = self.root.model_construct()
         self.shell_defaults = {}
+        self.source_cache = {}
         self.shells = [self.shell]
         self.is_chat = False
 
@@ -928,7 +958,7 @@ class App(picle_cmd.Cmd):
                 source_callable = getattr(
                     model["model"], f"source_{last_field['name']}"
                 )
-                options = call_source(source_callable, models[-1], choice="")
+                options = self.call_source(source_callable, models[-1], choice="")
                 lines[name] = ", ".join([str(i) for i in options])
             else:
                 lines[name] = f"{field.description}"
@@ -1056,7 +1086,7 @@ class App(picle_cmd.Cmd):
                 # check if model has method to source field choices
                 elif hasattr(last_model, f"source_{last_field_name}"):
                     source_callable = getattr(last_model, f"source_{last_field_name}")
-                    fieldnames = call_source(
+                    fieldnames = self.call_source(
                         source_callable, command_models[-1], choice=text
                     )
                     # handle partial match

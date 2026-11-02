@@ -171,6 +171,125 @@ def test_completion_passes_current_choice(shell):
     assert calls == ["task"]
 
 
+def test_source_cache_sharing_expiry_and_clearing(shell, monkeypatch):
+    app, tasks = shell
+    calls = []
+    now = [100.0]
+    monkeypatch.setattr("picle.picle.time.monotonic", lambda: now[0])
+    tasks.model_fields["name"].json_schema_extra = {"source_cache_ttl": 10}
+
+    def source(service="all", hosts=None):
+        calls.append((service, hosts))
+        return ["task-one", "other"]
+
+    tasks.source_name = staticmethod(source)
+    line = "tasks service nornir hosts a b name "
+    discover(app, "completion", line)
+    discover(app, "?", line.replace("service", "svc"))
+    assert calls == [("nornir", ["a", "b"])]
+    # Local prefix filtering must not alter choices subsequently shown by help.
+    assert discover(app, "completion", line + "task") == ["task-one "]
+    assert "other" in discover(app, "help", line)
+    now[0] = 110.0
+    discover(app, "help", line)
+    assert len(calls) == 2
+    app.clear_source_cache()
+    discover(app, "completion", line)
+    assert len(calls) == 3
+    discover(app, "completion", line.replace("nornir", "other"))
+    assert len(calls) == 4
+    second = App(app.root, stdout=io.StringIO())
+    second.use_rich = False
+    discover(second, "completion", line)
+    assert len(calls) == 5
+
+
+@pytest.mark.parametrize("ttl", [None, 0, -1])
+def test_source_cache_disabled(shell, ttl):
+    app, tasks = shell
+    calls = []
+    tasks.model_fields["name"].json_schema_extra = {"source_cache_ttl": ttl}
+
+    def source():
+        calls.append(True)
+        return []
+
+    tasks.source_name = staticmethod(source)
+    for mode in ["completion", "help"]:
+        discover(app, mode, "tasks name ")
+    assert len(calls) == 2
+
+
+def test_source_cache_choice_and_empty_results(shell):
+    app, tasks = shell
+    calls = []
+    tasks.model_fields["name"].json_schema_extra = {"source_cache_ttl": 60}
+
+    def source(choice):
+        calls.append(choice)
+        return []
+
+    tasks.source_name = staticmethod(source)
+    for token in ["", "task", "task", ""]:
+        discover(app, "completion", "tasks name " + token)
+    discover(app, "help", "tasks name ")
+    assert calls == ["", "task"]
+
+
+def test_source_cache_does_not_cache_errors(shell):
+    app, tasks = shell
+    calls = []
+    tasks.model_fields["name"].json_schema_extra = {"source_cache_ttl": 60}
+
+    def source():
+        calls.append(True)
+        raise TypeError("source failure")
+
+    tasks.source_name = staticmethod(source)
+    for _ in range(2):
+        with pytest.raises(TypeError, match="source failure"):
+            discover(app, "help", "tasks name ")
+    assert len(calls) == 2
+
+
+def test_source_cache_separates_model_and_field(shell):
+    app, tasks = shell
+    calls = []
+
+    def source():
+        calls.append(True)
+        return ["task-one"]
+
+    for model, name in [(tasks, "name"), (tasks, "service"), (app.root, "service")]:
+        model.model_fields[name].json_schema_extra = {"source_cache_ttl": 60}
+        setattr(model, "source_" + name, staticmethod(source))
+    for _ in range(2):
+        for line in ["tasks name ", "tasks service ", "service "]:
+            discover(app, "help", line)
+    assert len(calls) == 3
+
+
+def test_source_cache_argument_types_and_unsupported_values(shell):
+    app, tasks = shell
+    calls = []
+    tasks.model_fields["name"].json_schema_extra = {"source_cache_ttl": 60}
+
+    def source(flag=None):
+        calls.append(flag)
+        return []
+
+    tasks.source_name = staticmethod(source)
+    for value in [False, 0, {"a": [1, 2], "b": None}, {"b": None, "a": [1, 2]}]:
+        tasks.model_fields["flag"].json_schema_extra["presence"] = value
+        discover(app, "help", "tasks flag name ")
+    assert len(calls) == 3  # False and zero differ; dictionary order does not.
+    tasks.model_fields["flag"].json_schema_extra["presence"] = object()
+    for _ in range(2):
+        with pytest.raises(TypeError, match="JSON serializable"):
+            discover(app, "help", "tasks flag name ")
+    assert len(calls) == 3
+
+
 @pytest.mark.parametrize("mode", ["completion", "help"])
 @pytest.mark.parametrize("missing", [False, True])
 def test_source_errors_follow_existing_handling_without_retry(shell, mode, missing):

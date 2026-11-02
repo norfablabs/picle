@@ -3,6 +3,7 @@
 ## ENHANCEMENTS
 
 1. Completion and help now pass already parsed command arguments to matching named parameters of `source_<field>` methods. Sources can use selected values such as `service` to provide context-aware choices. CLI aliases resolve to Python field names, nearer model values take precedence, and context stays within the current pipeline command. Absent arguments retain source defaults; existing no-argument and `choice` sources remain supported.
+2. Added opt-in source choice caching via field `json_schema_extra={"source_cache_ttl": 60}`. Completion and help share results per App, model, field and source arguments until expiry. Use `app.clear_source_cache()` to clear cached choices; source errors are never cached.
 
 ---
 
